@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <util/atomic.h>
 
 // TCRT5000
 #define TCRT_U1_PIN 2 // Right
@@ -15,16 +16,26 @@
 // L298N
 #define ENABLE_A_PIN 22
 #define ENABLE_B_PIN 23
-#define IN_A1_PIN 24
-#define IN_A2_PIN 25
-#define IN_B1_PIN 26
-#define IN_B2_PIN 27
+#define IN1_PIN 24
+#define IN2_PIN 25
+#define IN3_PIN 26
+#define IN4_PIN 27
 
 // Encoders
-#define ENC_A1_PIN 28
-#define ENC_B1_PIN 29
-#define ENC_A2_PIN 30
-#define ENC_B2_PIN 31
+#define ENC_A1_PIN 18
+#define ENC_B1_PIN 19
+#define ENC_A2_PIN 20
+#define ENC_B2_PIN 21
+
+enum State {
+  BRAKE,
+  ERROR,
+  FORWARD,
+  LEFTWARD,
+  RIGHTWARD,
+  REVERSE,
+  STOP
+};
 
 // Delay (us) for HC-SR04
 const int TRIG_CLEAR_DELAY = 2;
@@ -40,15 +51,7 @@ bool tcrt_u3;
 State previousState;
 State currentState;
 
-enum State {
-  BRAKE,
-  ERROR,
-  FORWARD,
-  LEFTWARD,
-  RIGHTWARD,
-  REVERSE,
-  STOP
-};
+volatile int pos_i = 0;
 
 void setState(State newState) {
   previousStateMillis = millis();
@@ -56,14 +59,22 @@ void setState(State newState) {
   currentState = newState;
 }
 
+void readEncoder(){
+  int b = digitalRead(ENC_B1_PIN);
+  int increment = 0;
+  if(b > 0){
+    increment = 1;
+  }
+  else{
+    increment = -1;
+  }
+  pos_i = pos_i + increment;
+}
+
 void readInput() {
   tcrt_u1 = digitalRead(TCRT_U1_PIN);
   tcrt_u2 = digitalRead(TCRT_U2_PIN);
   tcrt_u3 = digitalRead(TCRT_U3_PIN);
-
-  // getUltrasonicDistance(ECHO_U1_PIN);
-  // getUltrasonicDistance(ECHO_U2_PIN);
-  // getUltrasonicDistance(ECHO_U3_PIN);
 }
 
 void updateState() {
@@ -72,6 +83,89 @@ void updateState() {
     setState(REVERSE);
   }
 
+}
+
+void setup() {
+  pinMode(TCRT_U1_PIN, INPUT);
+  pinMode(TCRT_U2_PIN, INPUT);
+  pinMode(TCRT_U3_PIN, INPUT);
+  
+  pinMode(ECHO_U1_PIN, INPUT);
+  pinMode(ECHO_U2_PIN, INPUT);
+  pinMode(ECHO_U3_PIN, INPUT);
+
+  pinMode(TRIG_COM_PIN, OUTPUT);
+
+  pinMode(ENABLE_A_PIN, OUTPUT);
+  pinMode(ENABLE_B_PIN, OUTPUT);
+  pinMode(IN1_PIN, OUTPUT);
+  pinMode(IN2_PIN, OUTPUT);
+  pinMode(IN3_PIN, OUTPUT);
+  pinMode(IN2_PIN, OUTPUT);
+
+  pinMode(ENC_A1_PIN, INPUT);
+  pinMode(ENC_B1_PIN, INPUT);
+  pinMode(ENC_A2_PIN, INPUT);
+  pinMode(ENC_B2_PIN, INPUT);
+
+  attachInterrupt(digitalPinToInterrupt(ENC_A1_PIN), readEncoder, RISING);
+
+  Serial.begin(9600);
+}
+
+float getUltrasonicDistance(int echoPin) {
+  digitalWrite(TRIG_COM_PIN, LOW);
+  delayMicroseconds(TRIG_CLEAR_DELAY);
+  digitalWrite(TRIG_COM_PIN, HIGH);
+  delayMicroseconds(TRIG_HIGH_DELAY);
+  digitalWrite(TRIG_COM_PIN, LOW);
+  
+  return pulseIn(echoPin, HIGH) / 58.2;
+}
+
+void brake() {
+  analogWrite(ENABLE_A_PIN, velocity);
+  analogWrite(ENABLE_B_PIN, velocity);
+  digitalWrite(IN1_PIN, LOW);
+  digitalWrite(IN2_PIN, LOW);
+  digitalWrite(IN3_PIN, LOW);
+  digitalWrite(IN2_PIN, LOW);
+}
+
+void moveBackward() {
+  analogWrite(ENABLE_A_PIN, velocity);
+  analogWrite(ENABLE_B_PIN, velocity);
+  digitalWrite(IN1_PIN, LOW);
+  digitalWrite(IN2_PIN, HIGH);
+  digitalWrite(IN3_PIN, LOW);
+  digitalWrite(IN2_PIN, HIGH);
+}
+
+void moveForward() {
+  analogWrite(ENABLE_A_PIN, velocity);
+  analogWrite(ENABLE_B_PIN, velocity);
+  digitalWrite(IN1_PIN, HIGH);
+  digitalWrite(IN2_PIN, LOW);
+  digitalWrite(IN3_PIN, HIGH);
+  digitalWrite(IN2_PIN, LOW);
+}
+
+void moveLeft() {
+  analogWrite(ENABLE_A_PIN, velocity);
+  analogWrite(ENABLE_B_PIN, velocity);
+  digitalWrite(IN1_PIN, HIGH);
+  digitalWrite(IN2_PIN, LOW);
+  digitalWrite(IN3_PIN, LOW);
+  digitalWrite(IN2_PIN, HIGH);
+}
+
+void moveRight() {
+  analogWrite(ENABLE_A_PIN, velocity);
+  analogWrite(ENABLE_B_PIN, velocity);
+  digitalWrite(IN1_PIN, LOW);
+  digitalWrite(IN2_PIN, HIGH);
+  digitalWrite(IN3_PIN, HIGH);
+  digitalWrite(IN2_PIN, LOW);
 }
 
 void onBrake() {
@@ -102,36 +196,8 @@ void onStop() {
   brake();
 }
 
-void setup() {
-  pinMode(TCRT_U1_PIN, INPUT);
-  pinMode(TCRT_U2_PIN, INPUT);
-  pinMode(TCRT_U3_PIN, INPUT);
-  
-  pinMode(ECHO_U1_PIN, INPUT);
-  pinMode(ECHO_U2_PIN, INPUT);
-  pinMode(ECHO_U3_PIN, INPUT);
-
-  pinMode(TRIG_COM_PIN, OUTPUT);
-
-  pinMode(ENABLE_A_PIN, OUTPUT);
-  pinMode(ENABLE_B_PIN, OUTPUT);
-  pinMode(IN_A1_PIN, OUTPUT);
-  pinMode(IN_A2_PIN, OUTPUT);
-  pinMode(IN_B1_PIN, OUTPUT);
-  pinMode(IN_B2_PIN, OUTPUT);
-
-  pinMode(ENC_A1_PIN, INPUT);
-  pinMode(ENC_B1_PIN, INPUT);
-  pinMode(ENC_A2_PIN, INPUT);
-  pinMode(ENC_B2_PIN, INPUT);
-
-  Serial.begin(9600);
-
-  velocity = 100;
-}
-
 void loop() {
-  readInput();
+  /*readInput();
   updateState();
 
    switch (currentState) {
@@ -158,60 +224,5 @@ void loop() {
       break;
     default:
       break;
-  }
-}
-
-float getUltrasonicDistance(int echoPin) {
-  digitalWrite(TRIG_COM_PIN, LOW);
-  delayMicroseconds(TRIG_CLEAR_DELAY);
-  digitalWrite(TRIG_COM_PIN, HIGH);
-  delayMicroseconds(TRIG_HIGH_DELAY);
-  digitalWrite(TRIG_COM_PIN, LOW);
-  
-  return pulseIn(echoPin, HIGH) / 58.2;
-}
-
-void brake() {
-  analogWrite(ENABLE_A_PIN, velocity);
-  analogWrite(ENABLE_B_PIN, velocity);
-  digitalWrite(IN_A1_PIN, LOW);
-  digitalWrite(IN_A2_PIN, LOW);
-  digitalWrite(IN_B1_PIN, LOW);
-  digitalWrite(IN_B2_PIN, LOW);
-}
-
-void moveBackward() {
-  analogWrite(ENABLE_A_PIN, velocity);
-  analogWrite(ENABLE_B_PIN, velocity);
-  digitalWrite(IN_A1_PIN, LOW);
-  digitalWrite(IN_A2_PIN, HIGH);
-  digitalWrite(IN_B1_PIN, LOW);
-  digitalWrite(IN_B2_PIN, HIGH);
-}
-
-void moveForward() {
-  analogWrite(ENABLE_A_PIN, velocity);
-  analogWrite(ENABLE_B_PIN, velocity);
-  digitalWrite(IN_A1_PIN, HIGH);
-  digitalWrite(IN_A2_PIN, LOW);
-  digitalWrite(IN_B1_PIN, HIGH);
-  digitalWrite(IN_B2_PIN, LOW);
-}
-
-void moveLeft() {
-  analogWrite(ENABLE_A_PIN, velocity);
-  analogWrite(ENABLE_B_PIN, velocity);
-  digitalWrite(IN_A1_PIN, HIGH);
-  digitalWrite(IN_A2_PIN, LOW);
-  digitalWrite(IN_B1_PIN, LOW);
-  digitalWrite(IN_B2_PIN, HIGH);
-}
-
-void moveRight() {
-  analogWrite(ENABLE_A_PIN, velocity);
-  analogWrite(ENABLE_B_PIN, velocity);
-  digitalWrite(IN_A1_PIN, LOW);
-  digitalWrite(IN_A2_PIN, HIGH);
-  digitalWrite(IN_B1_PIN, HIGH);
-  digitalWrite(IN_B2_PIN, LOW);
+  }*/
 }
