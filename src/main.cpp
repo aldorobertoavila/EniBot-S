@@ -7,13 +7,13 @@
 #define TCRT_U3_PIN 4 // Back
 
 // HC-SR04
-#define ECHO_U1_PIN 23
-#define ECHO_U2_PIN 25
-#define ECHO_U3_PIN 27
+#define ECHO_U1_PIN 23 // Left
+#define ECHO_U2_PIN 25 // Front
+#define ECHO_U3_PIN 27 // Right
 
-#define TRIG_U1_PIN 22
-#define TRIG_U2_PIN 24
-#define TRIG_U3_PIN 26
+#define TRIG_U1_PIN 22 // Left
+#define TRIG_U2_PIN 24 // Front
+#define TRIG_U3_PIN 26 // Right
 
 // L298N
 #define ENABLE_A_PIN 8
@@ -39,23 +39,34 @@ enum State {
   STOP
 };
 
-// Delay (us) for HC-SR04
-const int TRIG_CLEAR_DELAY = 2;
-const int TRIG_HIGH_DELAY = 10;
+// Delay (us)
+const unsigned int TRIG_CLEAR_DELAY = 2;
+const unsigned int TRIG_HIGH_DELAY = 10;
 
 // Velocity [0, 255] at 9V
-const int FORWARD_VELOCITY = 100;
-const int LEFTWARD_VELOCITY = 100;
-const int RIGHTWARD_VELOCITY = 100;
-const int REVERSE_VELOCITY = 100;
+const unsigned int FORWARD_VELOCITY = 100;
+const unsigned int LEFTWARD_VELOCITY = 100;
+const unsigned int RIGHTWARD_VELOCITY = 100;
+const unsigned int REVERSE_VELOCITY = 100;
+
+const unsigned int BACKWARD_TIMEOUT = 750;
+// Delay (ms)
+const unsigned int ULTRASONIC_DELAY = 20;
+
+// Obstacle Distance (cm)
+const float NEARBY_DISTANCE = 12.5;
+const float SEARCH_DISTANCE = 25.25;
 
 // Control Gains
 const float kp = 0.9988;
 const float ki = 0.00001;
 const float kd = 0.00001;
 
-unsigned long previousStateMillis;
-unsigned int velocity;
+unsigned long prevUltrasonicMillis;
+unsigned long prevStateMillis;
+
+int velocity;
+float distance;
 
 bool tcrt_u1;
 bool tcrt_u2;
@@ -75,7 +86,7 @@ volatile long prevT_volatile;
 volatile float velocity_volatile;
 
 void setState(State newState) {
-  previousStateMillis = millis();
+  prevStateMillis = millis();
   previousState = currentState;
   currentState = newState;
 }
@@ -91,14 +102,6 @@ void readEncoderMotorB() {
     pos_volatile++;
   else
     pos_volatile--;
-}
-
-void updateState() {
-
-  if (tcrt_u1 && tcrt_u2) {
-    setState(REVERSE);
-  }
-
 }
 
 void setup() {
@@ -187,38 +190,14 @@ void moveRight() {
   analogWrite(ENABLE_B_PIN, velocity);
 }
 
-void onBrake() {
-  computeVelocity(0);
-  brake();
-}
-
-void onForward() {
-  computeVelocity(FORWARD_VELOCITY);
-  moveForward();
-}
-
-void onLeftward() {
-  computeVelocity(LEFTWARD_VELOCITY);
-  moveLeft();
-}
-
-void onRightward() {
-  computeVelocity(RIGHTWARD_VELOCITY);
-  moveRight();
-}
-
-void onReverse() {
-  computeVelocity(REVERSE_VELOCITY);
-  moveBackward();
-}
-
-void onSearch() {
+void computeObstacle(int trigPin, int echoPin) {
+  unsigned long currentMillis = millis();
   
-}
+  if(currentMillis - prevUltrasonicMillis > ULTRASONIC_DELAY) {
+    distance = getUltrasonicDistance(TRIG_U2_PIN, ECHO_U2_PIN);    
+    prevUltrasonicMillis = currentMillis;
+  }
 
-void onStop() {
-  computeVelocity(0);
-  brake();
 }
 
 void computeVelocity(int setPoint) {
@@ -263,6 +242,103 @@ void computeVelocity(int setPoint) {
   Serial.print(setPoint);
   Serial.print(" ");
   Serial.println(velocity);
+}
+
+void onBrake() {
+  computeVelocity(0);
+  brake();
+}
+
+void onForward() {
+  computeVelocity(FORWARD_VELOCITY);
+  moveForward();
+
+  tcrt_u1 = digitalRead(TCRT_U1_PIN);
+  tcrt_u2 = digitalRead(TCRT_U2_PIN);
+
+  if (tcrt_u1 || tcrt_u2) setState(REVERSE);
+}
+
+void onLeftward() {
+  computeObstacle(TRIG_U2_PIN, ECHO_U2_PIN);
+  computeVelocity(LEFTWARD_VELOCITY);
+  moveLeft();
+
+  if(distance <= NEARBY_DISTANCE) setState(FORWARD);
+}
+
+void onRightward() {
+  computeObstacle(TRIG_U2_PIN, ECHO_U2_PIN);
+  computeVelocity(RIGHTWARD_VELOCITY);
+  moveRight();
+
+  if(distance <= NEARBY_DISTANCE) setState(FORWARD);
+}
+
+void onReverse() {
+  computeVelocity(REVERSE_VELOCITY);
+  moveBackward();
+
+  tcrt_u3 = digitalRead(TCRT_U3_PIN);
+
+  if(tcrt_u3) {
+    setState(FORWARD);
+  }
+
+  unsigned long currentMillis = millis();
+
+  if(currentMillis - prevStateMillis > BACKWARD_TIMEOUT) {
+
+    if(tcrt_u1 && tcrt_u2) {
+      // if both, go turn around
+      setState(SEARCH);
+    } else if(tcrt_u1) {
+      // if right, go right
+      setState(LEFTWARD);
+    } else if(tcrt_u2) {
+      // if left, go right
+      setState(RIGHTWARD);
+    }
+
+  }
+
+}
+
+void onSearch() {
+  float distances[3] = {
+    getUltrasonicDistance(TRIG_U1_PIN, ECHO_U1_PIN),
+    getUltrasonicDistance(TRIG_U2_PIN, ECHO_U2_PIN),
+    getUltrasonicDistance(TRIG_U3_PIN, ECHO_U3_PIN)
+  };
+
+  int index = -1;
+
+  for (int i = 0; i < 3; i++) {
+    float num = distances[i];
+    if(index == -1 || (num < distances[index] && num <= SEARCH_DISTANCE)) index = i;
+  }
+  
+  float least = distances[index];
+
+  if(least <= SEARCH_DISTANCE) {
+    switch (index) {
+    case 1:
+      setState(FORWARD);
+      break;
+    case 2:
+      setState(LEFTWARD);
+      break;
+    case 0:
+    default:
+      setState(RIGHTWARD);
+      break;
+    }
+  }
+}
+
+void onStop() {
+  computeVelocity(0);
+  brake();
 }
 
 void loop() {
