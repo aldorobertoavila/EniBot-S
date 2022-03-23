@@ -75,6 +75,7 @@ bool tcrt_u3;
 State previousState;
 State currentState;
 
+float lowPassFilter;
 float prevE;
 float prevV;
 float eIntegral;
@@ -83,7 +84,6 @@ long prevT;
 
 volatile long pos_volatile;
 volatile long prevT_volatile;
-volatile float velocity_volatile;
 
 void setState(State newState) {
   prevStateMillis = millis();
@@ -203,11 +203,9 @@ void computeObstacle(int trigPin, int echoPin) {
 
 void computeVelocity(int setPoint) {
   int local_pos;
-  float local_velocity;
 
   ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
     local_pos = pos_volatile;
-    local_velocity = velocity_volatile;
   }
 
   long currT = micros();
@@ -216,10 +214,10 @@ void computeVelocity(int setPoint) {
   float rawV = deltaV / 1000 * 60;
 
   // Low-pass filter
-  float filter = 0.89 * filter + 0.009 * rawV + 0.010 * prevV;
+  lowPassFilter = 0.89 * lowPassFilter + 0.009 * rawV + 0.010 * prevV;
 
-  // Compute e
-  float e = setPoint - filter;
+  // Compute error
+  float e = setPoint - lowPassFilter;
   float dError = (e  - prevE) / deltaT;
 
   eIntegral = eIntegral + (e * deltaT);
