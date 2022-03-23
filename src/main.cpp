@@ -318,22 +318,18 @@ void onSearch() {
     float num = distances[i];
     if(index == -1 || (num < distances[index] && num <= SEARCH_DISTANCE)) index = i;
   }
-  
-  float least = distances[index];
-
-  if(least <= SEARCH_DISTANCE) {
-    switch (index) {
-    case 1:
-      setState(FORWARD);
-      break;
-    case 2:
-      setState(LEFTWARD);
-      break;
-    case 0:
-    default:
-      setState(RIGHTWARD);
-      break;
-    }
+ 
+  switch (index) {
+  case 1:
+    setState(FORWARD);
+    break;
+  case 2:
+    setState(LEFTWARD);
+    break;
+  case 0:
+  default:
+    setState(RIGHTWARD);
+    break;
   }
 }
 
