@@ -44,18 +44,18 @@ const unsigned int TRIG_CLEAR_DELAY = 2;
 const unsigned int TRIG_HIGH_DELAY = 10;
 
 // Velocity [0, 255] at 9V
-const unsigned int FORWARD_VELOCITY = 100;
-const unsigned int LEFTWARD_VELOCITY = 100;
-const unsigned int RIGHTWARD_VELOCITY = 100;
-const unsigned int REVERSE_VELOCITY = 100;
+const unsigned int FORWARD_VELOCITY = 95;
+const unsigned int LEFTWARD_VELOCITY = 105;
+const unsigned int RIGHTWARD_VELOCITY = 105;
+const unsigned int REVERSE_VELOCITY = 95;
 
 const unsigned int BACKWARD_TIMEOUT = 750;
 // Delay (ms)
 const unsigned int ULTRASONIC_DELAY = 20;
 
 // Obstacle Distance (cm)
-const float NEARBY_DISTANCE = 12.5;
-const float SEARCH_DISTANCE = 25.25;
+const float NEARBY_DISTANCE = 25.5;
+const float SEARCH_DISTANCE = 40.25;
 
 // Control Gains
 const float kp = 0.9988;
@@ -133,6 +133,7 @@ void setup() {
   attachInterrupt(digitalPinToInterrupt(ENC_A2_PIN), readEncoderMotorB, RISING);
 
   Serial.begin(9600);
+  setState(SEARCH);
 }
 
 float getUltrasonicDistance(int trigPin, int echoPin) {
