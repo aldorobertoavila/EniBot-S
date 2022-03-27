@@ -11,7 +11,7 @@
 #define ECHO_U2_PIN 25 // Front
 #define ECHO_U3_PIN 27 // Right
 
-#define TRIG_U1_PIN 22 // Left
+#define TRIG_U1_PIN 22 // Left  
 #define TRIG_U2_PIN 24 // Front
 #define TRIG_U3_PIN 26 // Right
 
@@ -43,13 +43,17 @@ enum State {
 const unsigned int TRIG_CLEAR_DELAY = 2;
 const unsigned int TRIG_HIGH_DELAY = 10;
 
+// Forward-Reverse
+const unsigned int MAX_TRIES = 2;
+
 // Velocity [0, 255] at 9V
 const unsigned int FORWARD_VELOCITY = 95;
-const unsigned int LEFTWARD_VELOCITY = 105;
-const unsigned int RIGHTWARD_VELOCITY = 105;
+const unsigned int LEFTWARD_VELOCITY = 95;
+const unsigned int RIGHTWARD_VELOCITY = 95;
 const unsigned int REVERSE_VELOCITY = 95;
 
-const unsigned int BACKWARD_TIMEOUT = 750;
+const unsigned int BACKWARD_TIMEOUT = 600;
+
 // Delay (ms)
 const unsigned int ULTRASONIC_DELAY = 20;
 
@@ -66,6 +70,7 @@ unsigned long prevUltrasonicMillis;
 unsigned long prevStateMillis;
 
 int velocity;
+int tries;
 float distance;
 
 bool tcrt_u1;
@@ -280,7 +285,21 @@ void onReverse() {
 
   tcrt_u3 = digitalRead(TCRT_U3_PIN);
 
+  if(tries > MAX_TRIES) {
+    tries = 0;
+
+   if(tcrt_u1) {
+      // if right, go right
+      setState(LEFTWARD);
+    } else if(tcrt_u2) {
+      // if left, go right
+      setState(RIGHTWARD);
+    }
+  
+  }
+
   if(tcrt_u3) {
+    tries++;
     setState(FORWARD);
   }
 
