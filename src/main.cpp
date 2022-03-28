@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <SoftwareSerial.h>
 #include <util/atomic.h>
 
 // TCRT5000
@@ -29,6 +30,28 @@
 #define ENC_A2_PIN 20
 #define ENC_B2_PIN 21
 
+// ESP-01
+#define TX_PIN 14
+#define RX_PIN 15
+
+enum Command {
+  GET_STATE,
+  GET_TCRT,
+  GET_U,
+  GET_VELOCITY,
+  SET_MODE,
+  SET_STATE,
+  SET_VELOCITY_FORWARD,
+  SET_VELOCITY_LEFTWARD,
+  SET_VELOCITY_RIGHTWARD,
+  SET_VELOCITY_REVERSE
+};
+
+enum Mode {
+  AUTO,
+  MANUAL
+};
+
 enum State {
   BRAKE,
   FORWARD,
@@ -39,23 +62,22 @@ enum State {
   STOP
 };
 
+SoftwareSerial esp8266(TX_PIN, RX_PIN);
+
+// TCP/IP Communication
+const int BAUDRATE = 115200;
+
 // Delay (us)
 const unsigned int TRIG_CLEAR_DELAY = 2;
 const unsigned int TRIG_HIGH_DELAY = 10;
 
 // Forward-Reverse
 const unsigned int MAX_TRIES = 2;
-
-// Velocity [0, 255] at 9V
-const unsigned int FORWARD_VELOCITY = 95;
-const unsigned int LEFTWARD_VELOCITY = 95;
-const unsigned int RIGHTWARD_VELOCITY = 95;
-const unsigned int REVERSE_VELOCITY = 95;
-
 const unsigned int BACKWARD_TIMEOUT = 600;
 
 // Delay (ms)
 const unsigned int ULTRASONIC_DELAY = 20;
+const unsigned int COMMAND_DELAY = 100;
 
 // Obstacle Distance (cm)
 const float NEARBY_DISTANCE = 25.5;
@@ -66,17 +88,24 @@ const float kp = 0.9988;
 const float ki = 0.00001;
 const float kd = 0.00001;
 
+// Velocity [0, 255] at 9V
+unsigned int FORWARD_VELOCITY = 95;
+unsigned int LEFTWARD_VELOCITY = 95;
+unsigned int RIGHTWARD_VELOCITY = 95;
+unsigned int REVERSE_VELOCITY = 95;
+
 unsigned long prevUltrasonicMillis;
+unsigned long previousSerialMillis;
 unsigned long prevStateMillis;
 
 int velocity;
 int tries;
-float distance;
 
-bool tcrt_u1;
-bool tcrt_u2;
-bool tcrt_u3;
+// Sensor Data
+bool tcrt[3];
+float distances[3];
 
+Mode currentMode;
 State previousState;
 State currentState;
 
@@ -89,6 +118,10 @@ long prevT;
 
 volatile long pos_volatile;
 volatile long prevT_volatile;
+
+void setMode(Mode newMode) {
+  currentMode = newMode;
+}
 
 void setState(State newState) {
   prevStateMillis = millis();
@@ -110,6 +143,9 @@ void readEncoderMotorB() {
 }
 
 void setup() {
+  Serial.begin(BAUDRATE);
+  esp8266.begin(BAUDRATE);
+
   pinMode(TCRT_U1_PIN, INPUT);
   pinMode(TCRT_U2_PIN, INPUT);
   pinMode(TCRT_U3_PIN, INPUT);
@@ -134,10 +170,13 @@ void setup() {
   pinMode(ENC_A2_PIN, INPUT_PULLUP);
   pinMode(ENC_B2_PIN, INPUT_PULLUP);
 
+  pinMode(RX_PIN, INPUT);
+  pinMode(TX_PIN, OUTPUT);
+  
   // attachInterrupt(digitalPinToInterrupt(ENC_A1_PIN), readEncoderMotorA, RISING);
   attachInterrupt(digitalPinToInterrupt(ENC_A2_PIN), readEncoderMotorB, RISING);
 
-  Serial.begin(9600);
+  setMode(AUTO);
   setState(SEARCH);
 }
 
@@ -200,7 +239,8 @@ void computeObstacle(int trigPin, int echoPin) {
   unsigned long currentMillis = millis();
   
   if(currentMillis - prevUltrasonicMillis > ULTRASONIC_DELAY) {
-    distance = getUltrasonicDistance(TRIG_U2_PIN, ECHO_U2_PIN);    
+    // Front
+    distances[1] = getUltrasonicDistance(trigPin, echoPin);    
     prevUltrasonicMillis = currentMillis;
   }
 
@@ -257,8 +297,8 @@ void onForward() {
   computeVelocity(FORWARD_VELOCITY);
   moveForward();
 
-  tcrt_u1 = digitalRead(TCRT_U1_PIN);
-  tcrt_u2 = digitalRead(TCRT_U2_PIN);
+  int tcrt_u1 = tcrt[0];
+  int tcrt_u2 = tcrt[1];
 
   if (tcrt_u1 || tcrt_u2) setState(REVERSE);
 }
@@ -268,7 +308,8 @@ void onLeftward() {
   computeVelocity(LEFTWARD_VELOCITY);
   moveLeft();
 
-  if(distance <= NEARBY_DISTANCE) setState(FORWARD);
+  // Front
+  if(distances[1]  <= NEARBY_DISTANCE) setState(FORWARD);
 }
 
 void onRightward() {
@@ -276,29 +317,29 @@ void onRightward() {
   computeVelocity(RIGHTWARD_VELOCITY);
   moveRight();
 
-  if(distance <= NEARBY_DISTANCE) setState(FORWARD);
+  // Front
+  if(distances[1]  <= NEARBY_DISTANCE) setState(FORWARD);
 }
 
 void onReverse() {
   computeVelocity(REVERSE_VELOCITY);
   moveBackward();
 
-  tcrt_u3 = digitalRead(TCRT_U3_PIN);
-
   if(tries > MAX_TRIES) {
     tries = 0;
 
-   if(tcrt_u1) {
-      // if right, go right
+   if(tcrt[0]) {
+      // if IR right, go right
       setState(LEFTWARD);
-    } else if(tcrt_u2) {
-      // if left, go right
+    } else if(tcrt[1]) {
+      // if IR left, go right
       setState(RIGHTWARD);
     }
   
   }
 
-  if(tcrt_u3) {
+  // Back
+  if(tcrt[2]) {
     tries++;
     setState(FORWARD);
   }
@@ -307,13 +348,13 @@ void onReverse() {
 
   if(currentMillis - prevStateMillis > BACKWARD_TIMEOUT) {
 
-    if(tcrt_u1 && tcrt_u2) {
+    if(tcrt[0] && tcrt[1]) {
       // if both, go turn around
       setState(SEARCH);
-    } else if(tcrt_u1) {
+    } else if(tcrt[0]) {
       // if right, go right
       setState(LEFTWARD);
-    } else if(tcrt_u2) {
+    } else if(tcrt[1]) {
       // if left, go right
       setState(RIGHTWARD);
     }
@@ -323,11 +364,9 @@ void onReverse() {
 }
 
 void onSearch() {
-  float distances[3] = {
-    getUltrasonicDistance(TRIG_U1_PIN, ECHO_U1_PIN),
-    getUltrasonicDistance(TRIG_U2_PIN, ECHO_U2_PIN),
-    getUltrasonicDistance(TRIG_U3_PIN, ECHO_U3_PIN)
-  };
+  distances[0] = getUltrasonicDistance(TRIG_U1_PIN, ECHO_U1_PIN); 
+  distances[1] = getUltrasonicDistance(TRIG_U2_PIN, ECHO_U2_PIN);
+  distances[2] = getUltrasonicDistance(TRIG_U3_PIN, ECHO_U3_PIN);
 
   int index = -1;
 
@@ -355,7 +394,87 @@ void onStop() {
   brake();
 }
 
+String* split(String str, char separator) {
+  String* splits = {};
+  int i = 0;
+
+  while (str.length() > 0)
+  {
+    int index = str.indexOf(separator);
+    
+    if (index == -1) {
+      splits[i++] = str;
+      break;
+    }
+    else {
+      splits[i++] = str.substring(0, index);
+      str = str.substring(index + 1);
+    }
+  }
+}
+
+void readCommands() {
+  unsigned long currentMillis = millis();
+
+  if(currentMillis - previousSerialMillis > COMMAND_DELAY) {      
+    
+    if(esp8266.available() && esp8266.find('\n')) {
+      String buf = esp8266.readStringUntil('\n');
+      String* arr = split(buf, '=');
+      
+      int commandIndex = arr[0].toInt();
+      int value = arr[1].toInt();
+
+      Command command = static_cast<Command>(commandIndex);
+
+      switch (command) {
+        case GET_STATE:
+          esp8266.println(currentState);
+          break;
+        case GET_TCRT:
+          esp8266.println(tcrt[value]);
+          break;
+        case GET_U:
+          esp8266.println(distances[value]);
+          break;
+        case GET_VELOCITY:
+          esp8266.println(velocity);
+          break;
+        case SET_MODE:
+          setMode(static_cast<Mode>(value));
+          break;
+        case SET_STATE:
+          setState(static_cast<State>(value));
+          break;
+        case SET_VELOCITY_FORWARD:
+          FORWARD_VELOCITY = value;
+          break;
+        case SET_VELOCITY_LEFTWARD:
+          LEFTWARD_VELOCITY = value;
+          break;
+        case SET_VELOCITY_RIGHTWARD:
+          RIGHTWARD_VELOCITY = value;
+          break;
+        case SET_VELOCITY_REVERSE:
+          REVERSE_VELOCITY = value;
+          break;
+        default:
+          break;
+      }
+    }
+  }
+}
+
+void readInputs() {
+  tcrt[0] = digitalRead(TCRT_U1_PIN);
+  tcrt[1] = digitalRead(TCRT_U2_PIN);
+  tcrt[2] = digitalRead(TCRT_U3_PIN);
+}
+
 void loop() {
+  readInputs();
+  readCommands();
+
   switch (currentState) {
     case BRAKE:
       onBrake();
