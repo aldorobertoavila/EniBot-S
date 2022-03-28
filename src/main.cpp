@@ -124,9 +124,11 @@ void setMode(Mode newMode) {
 }
 
 void setState(State newState) {
-  prevStateMillis = millis();
-  previousState = currentState;
-  currentState = newState;
+  if(currentMode != MANUAL) {
+    prevStateMillis = millis();
+    previousState = currentState;
+    currentState = newState;
+  }
 }
 
 void readEncoderMotorA() {
