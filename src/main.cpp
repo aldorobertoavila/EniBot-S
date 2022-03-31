@@ -1,5 +1,5 @@
 #include <Arduino.h>
-#include <SoftwareSerial.h>
+#include <SimpleCLI.h>
 #include <util/atomic.h>
 
 // TCRT5000
@@ -30,26 +30,14 @@
 #define ENC_A2_PIN 20
 #define ENC_B2_PIN 21
 
-// ESP-01
-#define TX_PIN 14
-#define RX_PIN 15
-
-enum Command {
-  GET_STATE,
-  GET_TCRT,
-  GET_U,
-  GET_VELOCITY,
-  SET_MODE,
-  SET_STATE,
-  SET_VELOCITY_FORWARD,
-  SET_VELOCITY_LEFTWARD,
-  SET_VELOCITY_RIGHTWARD,
-  SET_VELOCITY_REVERSE
-};
-
 enum Mode {
   AUTO,
   MANUAL
+};
+
+enum Sensor {
+  ULTRASONIC,
+  INFRARED
 };
 
 enum State {
@@ -62,11 +50,6 @@ enum State {
   STOP
 };
 
-SoftwareSerial esp8266(TX_PIN, RX_PIN);
-
-// TCP/IP Communication
-const int BAUDRATE = 115200;
-
 // Delay (us)
 const unsigned int TRIG_CLEAR_DELAY = 2;
 const unsigned int TRIG_HIGH_DELAY = 10;
@@ -77,22 +60,51 @@ const unsigned int BACKWARD_TIMEOUT = 600;
 
 // Delay (ms)
 const unsigned int ULTRASONIC_DELAY = 20;
-const unsigned int COMMAND_DELAY = 100;
 
 // Obstacle Distance (cm)
 const float NEARBY_DISTANCE = 25.5;
 const float SEARCH_DISTANCE = 40.25;
 
 // Control Gains
-const float kp = 0.9988;
-const float ki = 0.00001;
-const float kd = 0.00001;
+const float KP = 0.9988;
+const float KI = 0.00001;
+const float KD = 0.00065;
 
-// Velocity [0, 255] at 9V
-unsigned int FORWARD_VELOCITY = 95;
-unsigned int LEFTWARD_VELOCITY = 95;
-unsigned int RIGHTWARD_VELOCITY = 95;
-unsigned int REVERSE_VELOCITY = 95;
+String MODES[] = {
+  "AUTO",
+  "MANUAL"
+};
+
+String STATES[] = {
+  "BRAKE",
+  "FORWARD",
+  "LEFTWARD",
+  "RIGHTWARD",
+  "REVERSE",
+  "SEARCH",
+  "STOP"
+};
+
+unsigned int MODES_SIZE = 2;
+unsigned int STATES_SIZE = 7;
+
+SimpleCLI cli;
+
+Command MODE;
+Command STATE;
+Command SENSOR;
+Command VELOCITY;
+
+unsigned int forwardVelocity;
+unsigned int leftwardVelocity;
+unsigned int rightwardVelocity;
+unsigned int reverseVelocity;
+
+bool tcrt[3];
+float distances[3];
+
+Mode currentMode;
+State currentState;
 
 unsigned long prevUltrasonicMillis;
 unsigned long previousSerialMillis;
@@ -101,34 +113,29 @@ unsigned long prevStateMillis;
 int velocity;
 int tries;
 
-// Sensor Data
-bool tcrt[3];
-float distances[3];
-
-Mode currentMode;
+Mode previousMode;
 State previousState;
-State currentState;
 
 float lowPassFilter;
 float prevE;
 float prevV;
 float eIntegral;
-long prevPos;
+long pos;
 long prevT;
+long prevPos;
 
 volatile long pos_volatile;
 volatile long prevT_volatile;
 
 void setMode(Mode newMode) {
+  previousMode = currentMode;
   currentMode = newMode;
 }
 
 void setState(State newState) {
-  if(currentMode != MANUAL) {
-    prevStateMillis = millis();
-    previousState = currentState;
-    currentState = newState;
-  }
+  prevStateMillis = millis();
+  previousState = currentState;
+  currentState = newState;
 }
 
 void readEncoderMotorA() {
@@ -138,15 +145,46 @@ void readEncoderMotorA() {
 void readEncoderMotorB() {
   int b = digitalRead(ENC_B2_PIN);
 
-  if(b > 0)
+  if (b > 0)
     pos_volatile++;
   else
     pos_volatile--;
 }
 
+void errorCallback(cmd_error* e) {
+  CommandError cmdError(e);
+
+  Serial.print("ERROR: ");
+  Serial.println(cmdError.toString());
+
+  if (cmdError.hasCommand()) {
+    Serial.print("Did you mean \"");
+    Serial.print(cmdError.getCommand().toString());
+    Serial.println("\"?");
+  }
+}
+
+Mode getModeByName(String modeName) {
+  if (modeName.equals("AUTO")) return AUTO;
+  else if (modeName.equals("MANUAL")) return MANUAL;
+  return -1;
+}
+
+Sensor getSensorByName(String sensorName) {
+  if (sensorName.equals("ULTRASONIC")) return ULTRASONIC;
+  else if (sensorName.equals("INFRARED")) return INFRARED;
+  return -1;
+}
+
+State getStateByName(String stateName) {
+  for (int i = 0; i < STATES_SIZE; i++) {
+    if (stateName.equals(STATES[i])) return i;
+  }
+  return -1;
+}
+
 void setup() {
-  Serial.begin(BAUDRATE);
-  esp8266.begin(BAUDRATE);
+  Serial.begin(9600);
 
   pinMode(TCRT_U1_PIN, INPUT);
   pinMode(TCRT_U2_PIN, INPUT);
@@ -172,11 +210,34 @@ void setup() {
   pinMode(ENC_A2_PIN, INPUT_PULLUP);
   pinMode(ENC_B2_PIN, INPUT_PULLUP);
 
-  pinMode(RX_PIN, INPUT);
-  pinMode(TX_PIN, OUTPUT);
-  
   // attachInterrupt(digitalPinToInterrupt(ENC_A1_PIN), readEncoderMotorA, RISING);
   attachInterrupt(digitalPinToInterrupt(ENC_A2_PIN), readEncoderMotorB, RISING);
+
+  cli.setOnError(errorCallback);
+
+  MODE = cli.addCommand("mode");
+  MODE.addArgument("set", "AUTO");
+  MODE.addFlagArgument("get");
+
+  SENSOR = cli.addCommand("sensor");
+  SENSOR.addArgument("type");
+  SENSOR.addArgument("i");
+  SENSOR.addArgument("set", 0);
+  SENSOR.addFlagArgument("get");
+
+  STATE = cli.addCommand("state");
+  STATE.addArgument("set", "BRAKE");
+  STATE.addFlagArgument("get");
+
+  VELOCITY = cli.addCommand("velocity");
+  VELOCITY.addArgument("direction");
+  VELOCITY.addArgument("setpoint", 0);
+  VELOCITY.addFlagArgument("get");
+
+  forwardVelocity = 100;
+  leftwardVelocity = 100;
+  rightwardVelocity = 100;
+  reverseVelocity = 100;
 
   setMode(AUTO);
   setState(SEARCH);
@@ -237,27 +298,10 @@ void moveRight() {
   analogWrite(ENABLE_B_PIN, velocity);
 }
 
-void computeObstacle(int trigPin, int echoPin) {
-  unsigned long currentMillis = millis();
-  
-  if(currentMillis - prevUltrasonicMillis > ULTRASONIC_DELAY) {
-    // Front
-    distances[1] = getUltrasonicDistance(trigPin, echoPin);    
-    prevUltrasonicMillis = currentMillis;
-  }
-
-}
-
 void computeVelocity(int setPoint) {
-  int local_pos;
-
-  ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
-    local_pos = pos_volatile;
-  }
-
   long currT = micros();
   float deltaT = ((float) (currT - prevT)) / 1.0e6;
-  float deltaV = (local_pos - prevPos) / deltaT;
+  float deltaV = (pos - prevPos) / deltaT;
   float rawV = deltaV / 1000 * 60;
 
   // Low-pass filter
@@ -270,24 +314,20 @@ void computeVelocity(int setPoint) {
   eIntegral = eIntegral + (e * deltaT);
 
   // Compute u
-  float u = kp * e + ki * eIntegral + kd * dError;
+  float u = KP * e + KI * eIntegral + KD * dError;
   int pwr = (int) fabs(u);
 
   if (pwr > 255) {
     pwr = 255;
-  } else if(pwr < 0) {
+  } else if (pwr < 0) {
     pwr = 0;
   }
 
   prevE = e;
   prevT = currT;
   prevV = rawV;
-  prevPos = local_pos;
+  prevPos = pos;
   velocity = pwr;
-
-  Serial.print(setPoint);
-  Serial.print(" ");
-  Serial.println(velocity);
 }
 
 void onBrake() {
@@ -296,98 +336,99 @@ void onBrake() {
 }
 
 void onForward() {
-  computeVelocity(FORWARD_VELOCITY);
+  computeVelocity(forwardVelocity);
   moveForward();
 
-  int tcrt_u1 = tcrt[0];
-  int tcrt_u2 = tcrt[1];
+  if (currentMode != MANUAL) {
+    int tcrt_u1 = tcrt[0];
+    int tcrt_u2 = tcrt[1];
 
-  if (tcrt_u1 || tcrt_u2) setState(REVERSE);
+    if (tcrt_u1 || tcrt_u2) setState(REVERSE);
+  }
 }
 
 void onLeftward() {
-  computeObstacle(TRIG_U2_PIN, ECHO_U2_PIN);
-  computeVelocity(LEFTWARD_VELOCITY);
+  computeVelocity(leftwardVelocity);
   moveLeft();
 
   // Front
-  if(distances[1]  <= NEARBY_DISTANCE) setState(FORWARD);
+  if (currentMode != MANUAL && distances[1] <= NEARBY_DISTANCE) setState(FORWARD);
 }
 
 void onRightward() {
-  computeObstacle(TRIG_U2_PIN, ECHO_U2_PIN);
-  computeVelocity(RIGHTWARD_VELOCITY);
+  computeVelocity(rightwardVelocity);
   moveRight();
 
   // Front
-  if(distances[1]  <= NEARBY_DISTANCE) setState(FORWARD);
+  if (currentMode != MANUAL && distances[1] <= NEARBY_DISTANCE) setState(FORWARD);
 }
 
 void onReverse() {
-  computeVelocity(REVERSE_VELOCITY);
+  computeVelocity(reverseVelocity);
   moveBackward();
 
-  if(tries > MAX_TRIES) {
-    tries = 0;
+  if (currentMode != MANUAL) {
+    if (tries > MAX_TRIES) {
+      tries = 0;
 
-   if(tcrt[0]) {
-      // if IR right, go right
-      setState(LEFTWARD);
-    } else if(tcrt[1]) {
-      // if IR left, go right
-      setState(RIGHTWARD);
-    }
-  
-  }
-
-  // Back
-  if(tcrt[2]) {
-    tries++;
-    setState(FORWARD);
-  }
-
-  unsigned long currentMillis = millis();
-
-  if(currentMillis - prevStateMillis > BACKWARD_TIMEOUT) {
-
-    if(tcrt[0] && tcrt[1]) {
-      // if both, go turn around
-      setState(SEARCH);
-    } else if(tcrt[0]) {
-      // if right, go right
-      setState(LEFTWARD);
-    } else if(tcrt[1]) {
-      // if left, go right
-      setState(RIGHTWARD);
+      if (tcrt[0]) {
+        // if IR right, go right
+        setState(LEFTWARD);
+      } else if (tcrt[1]) {
+        // if IR left, go right
+        setState(RIGHTWARD);
+      }
     }
 
-  }
+    // Back
+    if (tcrt[2]) {
+      tries++;
+      setState(FORWARD);
+    }
 
+    unsigned long currentMillis = millis();
+
+    if (currentMillis - prevStateMillis > BACKWARD_TIMEOUT) {
+
+      if (tcrt[0] && tcrt[1]) {
+        // if both, go turn around
+        setState(SEARCH);
+      } else if (tcrt[0]) {
+        // if right, go right
+        setState(LEFTWARD);
+      } else if (tcrt[1]) {
+        // if left, go right
+        setState(RIGHTWARD);
+      }
+
+    }
+  }
 }
 
 void onSearch() {
-  distances[0] = getUltrasonicDistance(TRIG_U1_PIN, ECHO_U1_PIN); 
-  distances[1] = getUltrasonicDistance(TRIG_U2_PIN, ECHO_U2_PIN);
-  distances[2] = getUltrasonicDistance(TRIG_U3_PIN, ECHO_U3_PIN);
+  computeVelocity(0);
+  brake();
 
-  int index = -1;
+  if (currentMode != MANUAL) {
+    int index = -1;
 
-  for (int i = 0; i < 3; i++) {
-    float num = distances[i];
-    if(index == -1 || (num < distances[index] && num <= SEARCH_DISTANCE)) index = i;
-  }
- 
-  switch (index) {
-  case 1:
-    setState(FORWARD);
-    break;
-  case 2:
-    setState(LEFTWARD);
-    break;
-  case 0:
-  default:
-    setState(RIGHTWARD);
-    break;
+    for (int i = 0; i < 3; i++) {
+      float num = distances[i];
+      if (index == -1 || (num < distances[index] && num <= SEARCH_DISTANCE)) index = i;
+    }
+    
+    switch (index) {
+      case 1:
+        setState(FORWARD);
+        break;
+      case 2:
+        setState(LEFTWARD);
+        break;
+      case 0:
+      default:
+        setState(RIGHTWARD);
+        break;
+    }
   }
 }
 
@@ -396,86 +437,191 @@ void onStop() {
   brake();
 }
 
-String* split(String str, char separator) {
-  String* splits = {};
-  int i = 0;
+void modeCommand(Command cmd) {
+  Argument setterArg = cmd.getArgument("set");
+  String setterValue = setterArg.getValue();
+  bool isSetterSet = setterArg.isSet();
+  Mode newMode = getModeByName(setterValue);
 
-  while (str.length() > 0)
-  {
-    int index = str.indexOf(separator);
-    
-    if (index == -1) {
-      splits[i++] = str;
+  Argument getterArg = cmd.getArgument("get");
+  bool isGetterSet = getterArg.isSet();
+
+  if (newMode != -1 || isGetterSet) {
+    if (isSetterSet) setMode(newMode);
+    if (isGetterSet) Serial.println(MODES[isSetterSet ? newMode : currentMode]);
+  } else {
+    Serial.print("ERROR: Invalid Mode <");
+    Serial.print(setterValue);
+    Serial.print(">, must be any of [ ");
+    for (int i = 0; i < MODES_SIZE; i++) {
+      Serial.print(MODES[i]);
+      if (i < MODES_SIZE - 1) Serial.print(", ");
+    }
+    Serial.println("].");
+  }
+}
+
+void sensorCommand(Command cmd) {
+  Argument sensorArg = cmd.getArgument("type");
+  String sensorValue = sensorArg.getValue();
+  Sensor type = getSensorByName(sensorValue);
+
+  Argument indexArg = cmd.getArgument("i");
+  int i = indexArg.getValue().toInt();
+
+  Argument setterArg = cmd.getArgument("set");
+  float newValue = setterArg.getValue().toFloat();
+  int newInt = setterArg.getValue().toInt();
+  bool isSetterSet = setterArg.isSet();
+
+  Argument getterArg = cmd.getArgument("get");
+  bool isGetterSet = getterArg.isSet();
+
+  switch (type) {
+    case ULTRASONIC:
+      if (i >= 0 && i <= 2) {
+        if (isSetterSet) distances[i] = newValue;
+        if (isGetterSet) Serial.println(distances[i]);
+      } else {
+        Serial.print("ERROR: Invalid Ultrasonic Index <");
+        Serial.print(i);
+        Serial.println(">, must be between [0, 2].");
+      }
       break;
+    case INFRARED:
+      if (i >= 0 && i <= 2) {
+        if (isSetterSet) {
+          if (newInt == 0 || newInt == 1) {
+            tcrt[i] = newInt;
+          } else {
+            Serial.print("ERROR: Invalid Value for Infrared <");
+            Serial.print(newInt);
+            Serial.println(">, must be [0, 1].");
+            return;
+          }
+        }
+        if (isGetterSet) Serial.println(tcrt[i]);
+      } else {
+        Serial.print("ERROR: Invalid infrared index <");
+        Serial.print(i);
+        Serial.println(">, must be between [0, 2].");
+      }
+      break;
+    default:
+      Serial.print("ERROR: Invalid sensor <");
+      Serial.print(sensorValue);
+      Serial.println(">, must be either \"ULTRASONIC\" or \"INFRARED\".");
+      break;
+  }
+}
+
+void stateCommand(Command cmd) {
+  Argument setterArg = cmd.getArgument("set");
+  String setterValue = setterArg.getValue();
+  bool isSetterSet = setterArg.isSet();
+  State newState = getStateByName(setterValue);
+
+  Argument getterArg = cmd.getArgument("get");
+  bool isGetterSet = getterArg.isSet();
+
+  if (newState != -1 || isGetterSet) {
+    if (isSetterSet) setState(newState);
+    if (isGetterSet) Serial.println(STATES[isSetterSet ? newState : currentState]);
+  } else {
+    Serial.print("ERROR: Invalid State <");
+    Serial.print(setterValue);
+    Serial.print(">, must be any of [ ");
+    for (int i = 0; i < STATES_SIZE; i++) {
+      Serial.print(STATES[i]);
+      if (i < STATES_SIZE - 1) Serial.print(", ");
     }
-    else {
-      splits[i++] = str.substring(0, index);
-      str = str.substring(index + 1);
+    Serial.println("].");
+  }
+}
+
+void velocityCommand(Command cmd) {
+  Argument dirArg = cmd.getArgument("direction");
+  String str = dirArg.getValue();
+  char dirValue = str[0];
+
+  Argument setterArg = cmd.getArgument("setpoint");
+  int newValue = setterArg.getValue().toInt();
+  bool isSetterSet = setterArg.isSet();
+
+  Argument getterArg = cmd.getArgument("get");
+  bool isGetterSet = getterArg.isSet();
+
+  bool isValid = str.length() == 1;
+  int* addr;
+
+  switch (dirValue) {
+    case 'f':
+      addr = &forwardVelocity;
+      break;
+    case 'r':
+      addr = &rightwardVelocity;
+      break;
+    case 'l':
+      addr = &leftwardVelocity;
+      break;
+    case 'b':
+      addr = &reverseVelocity;
+      break;
+    default:
+      isValid = isValid && false;
+      break;
+  }
+
+  if (isValid) {
+    if (isSetterSet) {
+      if (newValue >= 0 && newValue <= 255) *addr = newValue;
+      else {
+        Serial.print("ERROR: Invalid Set Point for Velocity <");
+        Serial.print(newValue);
+        Serial.println(">, must be between [0, 225].");
+        return;
+      }
     }
+    if (isGetterSet) Serial.println(*addr);
+  } else {
+    Serial.print("ERROR: Invalid Direction <");
+    Serial.print(dirValue);
+    Serial.println(">, must be any of ['f', 'r', 'l', 'b'].");
   }
 }
 
 void readCommands() {
-  unsigned long currentMillis = millis();
+  if (Serial.available()) {
+    String input = Serial.readStringUntil('\n');
+    Serial.print("# ");
+    Serial.println(input);
+    cli.parse(input);
 
-  if(currentMillis - previousSerialMillis > COMMAND_DELAY) {      
-    
-    if(esp8266.available() && esp8266.find('\n')) {
-      String buf = esp8266.readStringUntil('\n');
-      String* arr = split(buf, '=');
-      
-      int commandIndex = arr[0].toInt();
-      int value = arr[1].toInt();
+    Command cmd = cli.getCmd();
 
-      Command command = static_cast<Command>(commandIndex);
-
-      switch (command) {
-        case GET_STATE:
-          esp8266.println(currentState);
-          break;
-        case GET_TCRT:
-          esp8266.println(tcrt[value]);
-          break;
-        case GET_U:
-          esp8266.println(distances[value]);
-          break;
-        case GET_VELOCITY:
-          esp8266.println(velocity);
-          break;
-        case SET_MODE:
-          setMode(static_cast<Mode>(value));
-          break;
-        case SET_STATE:
-          setState(static_cast<State>(value));
-          break;
-        case SET_VELOCITY_FORWARD:
-          FORWARD_VELOCITY = value;
-          break;
-        case SET_VELOCITY_LEFTWARD:
-          LEFTWARD_VELOCITY = value;
-          break;
-        case SET_VELOCITY_RIGHTWARD:
-          RIGHTWARD_VELOCITY = value;
-          break;
-        case SET_VELOCITY_REVERSE:
-          REVERSE_VELOCITY = value;
-          break;
-        default:
-          break;
-      }
-    }
+    if (cmd == MODE) modeCommand(cmd);
+    else if (cmd == SENSOR) sensorCommand(cmd);
+    else if (cmd == STATE) stateCommand(cmd);
+    else if (cmd == VELOCITY) velocityCommand(cmd);
   }
 }
 
-void readInputs() {
-  tcrt[0] = digitalRead(TCRT_U1_PIN);
-  tcrt[1] = digitalRead(TCRT_U2_PIN);
-  tcrt[2] = digitalRead(TCRT_U3_PIN);
+void readSensors() {
+  unsigned long currentMillis = millis();
+
+  if (currentMillis - prevUltrasonicMillis > ULTRASONIC_DELAY) {
+    distances[0] = getUltrasonicDistance(TRIG_U1_PIN, ECHO_U1_PIN);
+    distances[1] = getUltrasonicDistance(TRIG_U2_PIN, ECHO_U2_PIN);
+    distances[2] = getUltrasonicDistance(TRIG_U3_PIN, ECHO_U3_PIN);
+    prevUltrasonicMillis = currentMillis;
+  }
+
+  tcrt[0] = !digitalRead(TCRT_U1_PIN);
+  tcrt[1] = !digitalRead(TCRT_U2_PIN);
+  tcrt[2] = !digitalRead(TCRT_U3_PIN);
 }
 
-void loop() {
-  readInputs();
-  readCommands();
+void updateState() {
 
   switch (currentState) {
     case BRAKE:
@@ -502,4 +648,14 @@ void loop() {
     default:
       break;
   }
+}
+
+void loop() {
+  // update before CLI
+  readSensors();
+  // update command-line interface
+  readCommands();
+
+  // update FMS
+  updateState();
 }
