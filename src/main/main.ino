@@ -1,4 +1,3 @@
-#include <Arduino.h>
 #include <SimpleCLI.h>
 #include <util/atomic.h>
 
