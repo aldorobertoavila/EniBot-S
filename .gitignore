@@ -3,7 +3,7 @@
 
 # Project
 run/
-example/
+examples/
 
 # Python
 __pycache__

@@ -249,6 +249,14 @@ class HMI(tk.Tk):
         self.debug_frame.pack(fill=tk.X, side=tk.TOP)
 
 
+        def on_closing():
+            if messagebox.askokcancel("Quit", "Do you want to quit?"):
+            # arduino.close()
+                self.destroy()
+
+        self.protocol("WM_DELETE_WINDOW", on_closing)
+        self.eval('tk::PlaceWindow . center')
+
 if __name__ == '__main__':
     root = HMI("EniBot-S")
     root.mainloop()
