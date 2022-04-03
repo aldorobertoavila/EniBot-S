@@ -1,0 +1,9 @@
+# IDE
+.vscode/
+
+# Project
+run/
+example/
+
+# Python
+__pycache__
