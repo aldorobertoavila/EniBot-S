@@ -67,12 +67,12 @@ class GraphMonitor(tk.Tk):
         self.canvas.draw()
         self.canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=tk.YES)
 
-        self.ultrasonic = self.fig.add_subplot(221)
+        self.ultrasonic = self.fig.add_subplot(121)
         self.fig.subplots_adjust(bottom=0.25)
         self.ultrasonic.set(xlim=(0, sampling_size), ylim=(0, sampling_size))
         self.ultrasonic.grid()
 
-        self.encoder = self.fig.add_subplot(222)
+        self.encoder = self.fig.add_subplot(122)
         self.fig.subplots_adjust(bottom=0.25)
         self.encoder.set(xlim=(0, sampling_size), ylim=(0, sampling_size))
         self.encoder.grid()
