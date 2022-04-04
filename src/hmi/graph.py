@@ -1,6 +1,7 @@
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.pyplot import Figure
-from tkinter import messagebox
+
+from main import CSV_PATH
 
 import matplotlib.animation as anim
 import tkinter as tk
@@ -8,16 +9,12 @@ import tkinter.ttk as ttk
 
 import copy
 import csv
+import os
 import time
 import threading
 
-from serial import SerialException
-
 import device
 import log
-
-CSV_FOLDER = "../../run/datagen/csv"
-LOGS_FOLDER = "../../run/logs"
 
 def threaded(fn):
     def wrapper(*args, **kwargs):
@@ -95,9 +92,10 @@ class GraphMonitor(tk.Tk):
 
     @threaded
     def collect_data(self):
+        path = os.path.join(CSV_PATH, f"{self.filename}.csv")
         ref = time.time()
         timer = log.Timer(ref)
-        with open(f"{CSV_FOLDER}/{self.filename}.csv", 'a', newline='') as file:
+        with open(path, 'a', newline='') as file:
             writer = csv.DictWriter(file, fieldnames=self.fieldnames)
             while not self.destroyed:
                 try:

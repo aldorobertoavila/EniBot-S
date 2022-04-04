@@ -1,5 +1,4 @@
 from serial.tools import list_ports
-from serial import SerialException
 
 import time
 import serial

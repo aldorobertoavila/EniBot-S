@@ -14,7 +14,7 @@ CWD = os.getcwd()
 IMG_PATH = os.path.join(CWD, '../assets/img')
 RUN_PATH = os.path.join(CWD, '../../run')
 
-DEBUG_PATH = os.path.join(RUN_PATH, 'logs')
+LOGS_PATH = os.path.join(RUN_PATH, 'logs')
 DATAGEN_PATH = os.path.join(RUN_PATH, 'datagen')
 CSV_PATH = os.path.join(DATAGEN_PATH, 'csv')
 EXCEL_PATH = os.path.join(DATAGEN_PATH, 'excel')
@@ -212,7 +212,7 @@ class HMI(tk.Tk):
         self.fieldnames = ['Time', 'U1', 'U2', 'U3', 'IR1', 'IR2', 'IR3', 'EN_A', 'EN_B']
 
         self.filename = log.get_filename()
-        self.logger = log.get_logger(DEBUG_PATH, self.filename)
+        self.logger = log.get_logger(LOGS_PATH, self.filename)
 
         self.arduino = device.EniBot()
         self.arduino.connect_to(device.get_devices()[0], BAUDRATE)
