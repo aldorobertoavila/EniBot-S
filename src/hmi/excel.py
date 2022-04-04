@@ -1,8 +1,10 @@
 import pandas as pd
+import os
 
-def convert_csv(columns, path, csv):
-    frame = pd.read_csv(csv)
-
-    with pd.ExcelWriter(path) as writer:
-        frame.columns = columns
-        frame.to_excel(writer, index = None, header = True, sheet_name='Sensors')
+def convert_csv(columns, excel_file, csv_files, sheetnames):
+    with pd.ExcelWriter(excel_file) as writer:
+        for i, csv_file in enumerate(csv_files):
+            frame = pd.read_csv(csv_file)
+                
+            frame.columns = columns
+            frame.to_excel(writer, index = None, header = True, sheet_name=sheetnames[i])

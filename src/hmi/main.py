@@ -210,7 +210,8 @@ class HMI(tk.Tk):
         self.geometry("900x480")
         
         self.fieldnames = ['Time', 'U1', 'U2', 'U3', 'IR1', 'IR2', 'IR3', 'EN_A', 'EN_B']
-
+        self.sheet_index = 0
+        
         self.filename = log.get_filename()
         self.logger = log.get_logger(LOGS_PATH, self.filename)
 
@@ -245,8 +246,9 @@ class HMI(tk.Tk):
             self.attributes('-disabled', True)
             self.debug_frame.disable()
             self.monitor_button['state'] = 'disabled'
-            monitor = graph.GraphMonitor("Monitor", logger=self.logger, filename=self.filename, fieldnames=self.fieldnames, arduino=self.arduino, baudrate=BAUDRATE, sampling_size=100)
+            monitor = graph.GraphMonitor("Monitor", logger=self.logger, filename=f"{self.filename}-{self.sheet_index + 1}", fieldnames=self.fieldnames, arduino=self.arduino, baudrate=BAUDRATE, sampling_size=100)
             thread = monitor.collect_data()
+            self.sheet_index+=1
 
             def delete():
                 self.attributes('-disabled', False)
@@ -274,11 +276,14 @@ class HMI(tk.Tk):
     def on_closing(self):
         if messagebox.askokcancel("Quit", "Do you want to quit?"):
             excel_file = os.path.join(EXCEL_PATH, f"{self.filename}.xlsx")
-            csv_file = os.path.join(CSV_PATH, f"{self.filename}.csv")
+            csv_files = []
+            sheetnames = []
             
-            if(os.path.exists(csv_file)):
-                excel.convert_csv(self.fieldnames, excel_file, csv_file)
+            for i in range(self.sheet_index):
+                csv_files.append(os.path.join(CSV_PATH, f"{self.filename}-{i + 1}.csv"))
+                sheetnames.append(f"Simulation {i + 1}")
             
+            excel.convert_csv(self.fieldnames, excel_file, csv_files, sheetnames)
             self.destroy()
 
 
