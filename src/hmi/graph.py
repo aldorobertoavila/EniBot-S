@@ -61,9 +61,9 @@ class GraphMonitor(tk.Tk):
         self.xy_list = [[], [], [], [], [], [], [], [], []]
         self.xy_offset = 0
 
-        self.devices_combo = SerialComboBox(self)
-        self.devices_combo.pack()
-        self.devices_combo.bind("<<ComboboxSelected>>", self.on_port_select)
+        # self.devices_combo = SerialComboBox(self)
+        # self.devices_combo.pack()
+        # self.devices_combo.bind("<<ComboboxSelected>>", self.on_port_select)
 
         self.fig = Figure(figsize=(12, 9))
         self.canvas = FigureCanvasTkAgg(self.fig, self)
@@ -85,12 +85,12 @@ class GraphMonitor(tk.Tk):
         self.eval('tk::PlaceWindow . center')
         self.protocol("WM_DELETE_WINDOW", self.on_closing)
 
-    def on_port_select(self, event):
-        com = event.widget.get()
-        try:
-            self.arduino.connect_to(com, self.baudrate)
-        except SerialException as e:
-            print(f"Cannot connect to {com}: {e}")
+    #def on_port_select(self, event):
+    #    com = event.widget.get()
+    #    try:
+    #        self.arduino.connect_to(com, self.baudrate)
+    #    except SerialException as e:
+    #        print(f"Cannot connect to {com}: {e}")
 
     def writeRow(self, array, writer):
         row = {}
@@ -119,13 +119,11 @@ class GraphMonitor(tk.Tk):
                     data = copy.deepcopy(array)
                     self.xy_list = data
                 except Exception as e:
-                    print(e)
+                    pass
             
             # saves data samples under sampling size
             for i in range(len(self.xy_list[0])):
                 self.writeRow(self.xy_list, writer)
-            # disconnects after reading and saving data
-            self.arduino.disconnect()
 
     def on_closing(self):
         try:

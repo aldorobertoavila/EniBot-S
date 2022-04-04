@@ -1,10 +1,8 @@
 import tkinter as tk
-import tkinter.ttk as ttk
-
 import os
-import logging
 
 from PIL import ImageTk, Image
+from serial import SerialException
 from tkinter import StringVar, messagebox
 
 import device
@@ -234,7 +232,7 @@ class HMI(tk.Tk):
         self.body_frame.pack(fill=tk.X, side=tk.TOP)
 
         self.debug_frame = log.ConsoleFrame(
-            self.body_frame, self.logger, height=550, width=280, padx=FRAME_PADX, pady=FRAME_PADY, bg='#66142a')
+            self.body_frame, self.logger, self.arduino, height=550, width=280, padx=FRAME_PADX, pady=FRAME_PADY, bg='#66142a')
         self.debug_frame.pack(fill=tk.Y, side=tk.LEFT)
 
         self.schem_frame = tk.Frame(self.body_frame, height=550, width=480)
@@ -267,12 +265,12 @@ class HMI(tk.Tk):
                              padx=FRAME_PADX, pady=FRAME_PADY, image=self.photo)
         self.logo.pack(fill=tk.X, side=tk.TOP)
 
-        def on_closing():
-            if messagebox.askokcancel("Quit", "Do you want to quit?"):
-                self.destroy()
-
-        self.protocol("WM_DELETE_WINDOW", on_closing)
+        self.protocol("WM_DELETE_WINDOW", self.on_closing)
         self.eval('tk::PlaceWindow . center')
+    
+    def on_closing(self):
+        if messagebox.askokcancel("Quit", "Do you want to quit?"):
+            self.destroy()
 
 
 if __name__ == '__main__':

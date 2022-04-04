@@ -17,6 +17,7 @@ class EniBot:
 
     def connect_to(self, port, baudrate):
         self.disconnect()
+        time.sleep(2)
         # opens new port
         self.serial.baudrate = baudrate
         self.serial.port = port
@@ -24,8 +25,7 @@ class EniBot:
         time.sleep(2)
     
     def disconnect(self):
-        if(self.is_open()):
-            self.serial.close()
+        self.serial.close()
             
     def is_open(self):
         return self.serial.is_open
@@ -37,18 +37,6 @@ class EniBot:
     
     def read_string(self):
         return self.serial.readline().decode("utf-8")
-
-    def move_forward(self):
-        self.send_command(b"state -set FORWARD")
-        
-    def move_leftward(self):
-        self.send_command(b"state -set LEFTWARD")
-        
-    def move_rightward(self):
-        self.send_command(b"state -set RIGHTWARD")
-        
-    def move_reverse(self):
-        self.send_command(b"state -set REVERSE")
         
     def send_command(self, command):
         self.serial.write(command)

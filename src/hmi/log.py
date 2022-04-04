@@ -39,8 +39,9 @@ class QueueHandler(logging.Handler):
 
 
 class ConsoleFrame(tk.Frame):
-    def __init__(self, parent, logger, **kw):
+    def __init__(self, parent, logger, arduino, **kw):
         tk.Frame.__init__(self, parent, **kw)
+        self.arduino = arduino
         self.logger = logger
         self.log_queue = queue.Queue()
         self.handler = QueueHandler(self.log_queue)
@@ -79,9 +80,14 @@ class ConsoleFrame(tk.Frame):
         self.after(100, self.poll)
 
     def submit(self):
+        msg = self.message.get()
         self.logger.setLevel(logging.DEBUG)
-        self.logger.debug(self.message.get())
+        self.logger.debug(msg)
         self.message.set('')
+
+        res = self.arduino.send_command(bytes(msg, encoding='utf8'))
+        self.logger.debug(res)
+        
         self.after(100, self.poll)
         
     def disable(self):
