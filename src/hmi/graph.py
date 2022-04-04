@@ -64,13 +64,18 @@ class GraphMonitor(tk.Tk):
         self.canvas.draw()
         self.canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=tk.YES)
 
+        self.fig.subplots_adjust(bottom=0.25, wspace=0.5)
         self.ultrasonic = self.fig.add_subplot(121)
-        self.fig.subplots_adjust(bottom=0.25)
+        self.ultrasonic.set_title("Ultrasonic")
+        self.ultrasonic.set_xlabel("Time")
+        self.ultrasonic.set_ylabel("Distance")
         self.ultrasonic.set(xlim=(0, sampling_size), ylim=(0, sampling_size))
         self.ultrasonic.grid()
 
         self.encoder = self.fig.add_subplot(122)
-        self.fig.subplots_adjust(bottom=0.25)
+        self.encoder.set_title("Encoder")
+        self.encoder.set_xlabel("Time")
+        self.encoder.set_ylabel("PWM")
         self.encoder.set(xlim=(0, sampling_size), ylim=(0, sampling_size))
         self.encoder.grid()
 
@@ -130,13 +135,13 @@ class GraphMonitor(tk.Tk):
             x_min = time_list[0]
             x_max = time_list[len(time_list) - 1]
 
-            self.ultrasonic.set(xlim=(x_min, x_max), ylim=(0, 100))
+            self.ultrasonic.set(xlim=(x_min, x_max), ylim=(0, 300))
             self.ultrasonic.plot(time_list, u1_list, label='U1', color='orange')
             self.ultrasonic.plot(time_list, u2_list, label='U2', color='yellow')
             self.ultrasonic.plot(time_list, u3_list, label='U3', color='green')
             
             y_max_encoder = 10
             
-            self.encoder.set(xlim=(x_min, x_max + 0.5), ylim=(0, 100 + y_max_encoder))
+            self.encoder.set(xlim=(x_min, x_max + 0.5), ylim=(0, 255 + y_max_encoder))
             self.encoder.plot(time_list, en_a_list, label='EN_A', color='blue')
             self.encoder.plot(time_list, en_b_list, label='EN_B', color='red')

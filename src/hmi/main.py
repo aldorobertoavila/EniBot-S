@@ -283,7 +283,9 @@ class HMI(tk.Tk):
                 csv_files.append(os.path.join(CSV_PATH, f"{self.filename}-{i + 1}.csv"))
                 sheetnames.append(f"Simulation {i + 1}")
             
-            excel.convert_csv(self.fieldnames, excel_file, csv_files, sheetnames)
+            if(len(sheetnames) > 0):
+                excel.convert_csv(self.fieldnames, excel_file, csv_files, sheetnames)
+            
             self.destroy()
 
 
