@@ -460,6 +460,13 @@ void modeCommand(Command cmd) {
   if (newMode != -1 || isGetterSet) {
     if (isSetterSet) setMode(newMode);
     if (isGetterSet) Serial.println(MODES[isSetterSet ? newMode : currentMode]);
+
+    if(isSetterSet && !isGetterSet) {
+      Serial.print("Set mode from ");
+      Serial.print(MODES[previousMode]);
+      Serial.print(" to ");
+      Serial.println(MODES[currentMode]);
+    }
   } else {
     Serial.print("ERROR: Invalid Mode <");
     Serial.print(setterValue);
@@ -557,6 +564,13 @@ void stateCommand(Command cmd) {
   if (newState != -1 || isGetterSet) {
     if (isSetterSet) setState(newState);
     if (isGetterSet) Serial.println(STATES[isSetterSet ? newState : currentState]);
+
+    if(isSetterSet && !isGetterSet) {
+      Serial.print("Set state from ");
+      Serial.print(STATES[previousState]);
+      Serial.print(" to ");
+      Serial.println(STATES[currentState]);
+    }
   } else {
     Serial.print("ERROR: Invalid State <");
     Serial.print(setterValue);

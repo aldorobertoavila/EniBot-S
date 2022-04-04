@@ -6,6 +6,7 @@ from serial import SerialException
 from tkinter import StringVar, messagebox
 
 import device
+import excel
 import graph
 import log
 
@@ -166,7 +167,7 @@ class GraphFrame(tk.Frame):
         tk.Frame.__init__(self, parent, **kw)
 
         self.header_lb = tk.Label(
-            self, font='Roboto 32', text='Sensors')
+            self, font='Arial 32', text='Sensors')
         self.header_lb.grid(row=1, column=1, sticky="ew")
 
         self.sensors_frame = tk.Frame(self)
@@ -207,6 +208,8 @@ class HMI(tk.Tk):
         self.title(parent)
         self.resizable(0, 0)
         self.geometry("900x480")
+        
+        self.fieldnames = ['Time', 'U1', 'U2', 'U3', 'IR1', 'IR2', 'IR3', 'EN_A', 'EN_B']
 
         self.filename = log.get_filename()
         self.logger = log.get_logger(DEBUG_PATH, self.filename)
@@ -242,7 +245,7 @@ class HMI(tk.Tk):
             self.attributes('-disabled', True)
             self.debug_frame.disable()
             self.monitor_button['state'] = 'disabled'
-            monitor = graph.GraphMonitor("Monitor", logger=self.logger, filename=self.filename, arduino=self.arduino, baudrate=BAUDRATE, sampling_size=400)
+            monitor = graph.GraphMonitor("Monitor", logger=self.logger, filename=self.filename, fieldnames=self.fieldnames, arduino=self.arduino, baudrate=BAUDRATE, sampling_size=100)
             thread = monitor.collect_data()
 
             def delete():
@@ -252,7 +255,7 @@ class HMI(tk.Tk):
                 monitor.destroyed = True
                 monitor.destroy()
                 thread.join()
-            
+
             monitor.protocol("WM_DELETE_WINDOW", delete)
 
         self.monitor_button = tk.Button(
@@ -270,6 +273,12 @@ class HMI(tk.Tk):
     
     def on_closing(self):
         if messagebox.askokcancel("Quit", "Do you want to quit?"):
+            excel_file = os.path.join(EXCEL_PATH, f"{self.filename}.xlsx")
+            csv_file = os.path.join(CSV_PATH, f"{self.filename}.csv")
+            
+            if(os.path.exists(csv_file)):
+                excel.convert_csv(self.fieldnames, excel_file, csv_file)
+            
             self.destroy()
 
 

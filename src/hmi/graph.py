@@ -14,11 +14,9 @@ import threading
 from serial import SerialException
 
 import device
-import excel
 import log
 
 CSV_FOLDER = "../../run/datagen/csv"
-EXCEL_FOLDER = "../../run/datagen/excel"
 LOGS_FOLDER = "../../run/logs"
 
 def threaded(fn):
@@ -44,7 +42,7 @@ class SerialComboBox(ttk.Combobox):
 
 
 class GraphMonitor(tk.Tk):
-    def __init__(self, parent, logger, arduino, filename, baudrate, sampling_size):
+    def __init__(self, parent, logger, arduino, filename, fieldnames, baudrate, sampling_size):
         tk.Tk.__init__(self, parent)
         self.geometry("900x400")
         self.resizable(0, 0)
@@ -55,8 +53,7 @@ class GraphMonitor(tk.Tk):
         self.baudrate = baudrate
         self.filename = filename
         self.sampling_size = sampling_size
-        self.fieldnames = ['Time', 'U1', 'U2', 'U3',
-                           'IR1', 'IR2', 'IR3', 'EN_A', 'EN_B']
+        self.fieldnames = fieldnames
         # [ [Time], [U1], [U2], [U3], [IR1], [IR2], [IR3], [EN_A], [EN_B] ]
         self.xy_list = [[], [], [], [], [], [], [], [], []]
         self.xy_offset = 0
@@ -67,7 +64,8 @@ class GraphMonitor(tk.Tk):
 
         self.fig = Figure(figsize=(12, 9))
         self.canvas = FigureCanvasTkAgg(self.fig, self)
-        self.canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=1)
+        self.canvas.draw()
+        self.canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=tk.YES)
 
         self.ultrasonic = self.fig.add_subplot(221)
         self.fig.subplots_adjust(bottom=0.25)
@@ -81,9 +79,6 @@ class GraphMonitor(tk.Tk):
 
         self.line = anim.FuncAnimation(
             self.fig, self.update_line, interval=100, blit=False)
-
-        self.eval('tk::PlaceWindow . center')
-        self.protocol("WM_DELETE_WINDOW", self.on_closing)
 
     #def on_port_select(self, event):
     #    com = event.widget.get()
@@ -124,12 +119,6 @@ class GraphMonitor(tk.Tk):
             # saves data samples under sampling size
             for i in range(len(self.xy_list[0])):
                 self.writeRow(self.xy_list, writer)
-
-    def on_closing(self):
-        try:
-            excel.convert_csv(self.fieldnames, f"{EXCEL_FOLDER}/{self.filename}.xlsx", f"{CSV_FOLDER}/{self.filename}.csv")
-        except:
-            self.destroy()
 
     def update_line(self, i):
         time_list = self.xy_list[0]

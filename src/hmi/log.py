@@ -24,8 +24,8 @@ def get_filename():
 def get_logger(folder, filename):
     logging.basicConfig(filename=f"{folder}/{filename}.log",
                         format="%(asctime)s %(levelname)s %(message)s", filemode="w")
-    logger = logging.getLogger()
-    logger.setLevel(logging.INFO)
+    logger = logging.getLogger("EniBot-S")
+    logger.setLevel(logging.DEBUG)
     return logger
 
 
@@ -54,7 +54,6 @@ class ConsoleFrame(tk.Frame):
         self.scrolled_text = scrolledtext.ScrolledText(self, state='disabled', height=12, width=30)
         self.scrolled_text.pack(fill=tk.X, side=tk.TOP)
 
-        self.scrolled_text.configure(font='TkFixedFont')
         self.scrolled_text.tag_config('INFO', foreground='black')
         self.scrolled_text.tag_config('DEBUG', foreground='gray')
         self.scrolled_text.tag_config('WARNING', foreground='orange')
@@ -73,22 +72,18 @@ class ConsoleFrame(tk.Frame):
         self.button = ttk.Button(self.form_frame, text='Send', command=self.submit, width=20)
         self.button.pack(fill=tk.Y, side=tk.LEFT)
         
-        self.logger.setLevel(logging.DEBUG)
-        self.logger.debug('EniBot-S ready for service!')
-        self.logger.setLevel(logging.INFO)
-
+        self.logger.info('EniBot-S ready for service!')
         self.after(100, self.poll)
 
     def submit(self):
         msg = self.message.get()
-        self.logger.setLevel(logging.DEBUG)
-        self.logger.debug(msg)
-        self.message.set('')
-
-        res = self.arduino.send_command(bytes(msg, encoding='utf8'))
-        self.logger.debug(res)
         
-        self.after(100, self.poll)
+        if(msg):
+            self.logger.info(msg)
+            self.message.set('')
+            res = self.arduino.send_command(bytes(msg, encoding='utf8'))
+            self.logger.info(res)
+            self.after(100, self.poll)
         
     def disable(self):
         self.button['state'] = 'disable'
