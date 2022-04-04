@@ -35,8 +35,10 @@ enum Mode {
 };
 
 enum Sensor {
-  ULTRASONIC,
-  INFRARED
+  ALL,
+  ENCODER,
+  INFRARED,
+  ULTRASONIC
 };
 
 enum State {
@@ -58,7 +60,7 @@ const unsigned int MAX_TRIES = 2;
 const unsigned int BACKWARD_TIMEOUT = 600;
 
 // Delay (ms)
-const unsigned int ULTRASONIC_DELAY = 20;
+const unsigned int ULTRASONIC_DELAY = 100;
 
 // Obstacle Distance (cm)
 const float NEARBY_DISTANCE = 25.5;
@@ -68,6 +70,13 @@ const float SEARCH_DISTANCE = 40.25;
 const float KP = 0.9988;
 const float KI = 0.00001;
 const float KD = 0.00065;
+
+String SENSORS[] = {
+  "ALL",
+  "ENCODER",
+  "INFRARED",
+  "ULTRASONIC"
+};
 
 String MODES[] = {
   "AUTO",
@@ -84,6 +93,7 @@ String STATES[] = {
   "STOP"
 };
 
+unsigned int SENSORS_SIZE = 2;
 unsigned int MODES_SIZE = 2;
 unsigned int STATES_SIZE = 7;
 
@@ -170,8 +180,9 @@ Mode getModeByName(String modeName) {
 }
 
 Sensor getSensorByName(String sensorName) {
-  if (sensorName.equals("ULTRASONIC")) return ULTRASONIC;
-  else if (sensorName.equals("INFRARED")) return INFRARED;
+  for (int i = 0; i < SENSORS_SIZE; i++) {
+    if (sensorName.equals(SENSORS[i])) return i;
+  }
   return -1;
 }
 
@@ -183,7 +194,7 @@ State getStateByName(String stateName) {
 }
 
 void setup() {
-  Serial.begin(9600);
+  Serial.begin(57600);
 
   pinMode(TCRT_U1_PIN, INPUT);
   pinMode(TCRT_U2_PIN, INPUT);
@@ -219,8 +230,8 @@ void setup() {
   MODE.addFlagArgument("get");
 
   SENSOR = cli.addCommand("sensor");
-  SENSOR.addArgument("type");
-  SENSOR.addArgument("i");
+  SENSOR.addArgument("type", "ALL");
+  SENSOR.addArgument("i", 0);
   SENSOR.addArgument("set", 0);
   SENSOR.addFlagArgument("get");
 
@@ -335,6 +346,7 @@ void onBrake() {
 }
 
 void onForward() {
+  // TEST PID 100*(sin(micros()/1e6)>0)
   computeVelocity(forwardVelocity);
   moveForward();
 
@@ -477,14 +489,23 @@ void sensorCommand(Command cmd) {
   bool isGetterSet = getterArg.isSet();
 
   switch (type) {
-    case ULTRASONIC:
-      if (i >= 0 && i <= 2) {
-        if (isSetterSet) distances[i] = newValue;
-        if (isGetterSet) Serial.println(distances[i]);
-      } else {
-        Serial.print("ERROR: Invalid Ultrasonic Index <");
-        Serial.print(i);
-        Serial.println(">, must be between [0, 2].");
+    case ALL:
+      if (isGetterSet) {
+        Serial.print(distances[0]);
+        Serial.print(",");
+        Serial.print(distances[1]);
+        Serial.print(",");
+        Serial.print(distances[2]);
+        Serial.print(",");
+        Serial.print(tcrt[0]);
+        Serial.print(",");
+        Serial.print(tcrt[1]);
+        Serial.print(",");
+        Serial.print(tcrt[2]);
+        Serial.print(",");
+        Serial.print(velocity);
+        Serial.print(",");
+        Serial.println(velocity);
       }
       break;
     case INFRARED:
@@ -502,6 +523,16 @@ void sensorCommand(Command cmd) {
         if (isGetterSet) Serial.println(tcrt[i]);
       } else {
         Serial.print("ERROR: Invalid infrared index <");
+        Serial.print(i);
+        Serial.println(">, must be between [0, 2].");
+      }
+      break;
+    case ULTRASONIC:
+      if (i >= 0 && i <= 2) {
+        if (isSetterSet) distances[i] = newValue;
+        if (isGetterSet) Serial.println(distances[i]);
+      } else {
+        Serial.print("ERROR: Invalid Ultrasonic Index <");
         Serial.print(i);
         Serial.println(">, must be between [0, 2].");
       }
@@ -592,10 +623,8 @@ void velocityCommand(Command cmd) {
 void readCommands() {
   if (Serial.available()) {
     String input = Serial.readStringUntil('\n');
-    Serial.print("# ");
-    Serial.println(input);
+    
     cli.parse(input);
-
     Command cmd = cli.getCmd();
 
     if (cmd == MODE) modeCommand(cmd);
@@ -610,8 +639,10 @@ void readSensors() {
 
   if (currentMillis - prevUltrasonicMillis > ULTRASONIC_DELAY) {
     distances[0] = getUltrasonicDistance(TRIG_U1_PIN, ECHO_U1_PIN);
-    distances[1] = getUltrasonicDistance(TRIG_U2_PIN, ECHO_U2_PIN);
-    distances[2] = getUltrasonicDistance(TRIG_U3_PIN, ECHO_U3_PIN);
+    // distances[1] = getUltrasonicDistance(TRIG_U2_PIN, ECHO_U2_PIN);
+    // distances[2] = getUltrasonicDistance(TRIG_U3_PIN, ECHO_U3_PIN);
+    distances[1] = 40;
+    distances[2] = 30;
     prevUltrasonicMillis = currentMillis;
   }
 

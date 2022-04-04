@@ -6,20 +6,15 @@ from datetime import datetime
 
 import logging
 import queue
-import serial
 import time
 
 
 class Timer:
-    def __init__(self, ref):
+    def __init__(self, ref=0):
         self.ref = ref
 
-    def millis(self):
-        return get_current_millis() - self.ref
-
-
-def get_current_millis():
-    return round(time.time() * 1000)
+    def seconds(self):
+        return time.time() - self.ref
 
 
 def get_filename():
@@ -30,24 +25,8 @@ def get_logger(folder, filename):
     logging.basicConfig(filename=f"{folder}/{filename}.log",
                         format="%(asctime)s %(levelname)s %(message)s", filemode="w")
     logger = logging.getLogger()
-    logger.setLevel(logging.DEBUG)
+    logger.setLevel(logging.INFO)
     return logger
-
-
-class Arduino():
-    def __init__(self, device):
-        self.port = device
-
-    def sendCommand(self, command):
-        self.port.write(command)
-        echo = self.read_string()
-        res = self.read_string()
-        print(echo)
-        print(res)
-        return [echo, res]
-
-    def read_string(self):
-        return self.port.readline().decode("utf-8")
 
 
 class QueueHandler(logging.Handler):
@@ -63,63 +42,62 @@ class ConsoleFrame(tk.Frame):
     def __init__(self, parent, logger, **kw):
         tk.Frame.__init__(self, parent, **kw)
         self.logger = logger
+        self.log_queue = queue.Queue()
+        self.handler = QueueHandler(self.log_queue)
 
-        self.vertical_pane = ttk.PanedWindow(self, orient=tk.VERTICAL)
-        self.vertical_pane.grid(row=0, column=0, sticky="nsew")
-        self.horizontal_pane = ttk.PanedWindow(
-            self.vertical_pane, orient=tk.HORIZONTAL)
-        self.vertical_pane.add(self.horizontal_pane)
-        self.form_frame = ttk.Labelframe(self.horizontal_pane, text="MyForm")
-        self.form_frame.columnconfigure(1, weight=1)
-        self.horizontal_pane.add(self.form_frame, weight=1)
-        self.console_frame = ttk.Labelframe(
-            self.horizontal_pane, text="Console")
-        self.console_frame.columnconfigure(0, weight=1)
-        self.console_frame.rowconfigure(0, weight=1)
-        self.horizontal_pane.add(self.console_frame, weight=1)
-        self.third_frame = ttk.Labelframe(
-            self.vertical_pane, text="Third Frame")
-        self.vertical_pane.add(self.third_frame, weight=1)
+        # set format
+        self.handler.setFormatter(
+            logging.Formatter('%(asctime)s: %(message)s', '%H:%M:%S'))
+        self.logger.addHandler(self.handler)
 
-        self.form = FormUi(self.form_frame, self.logger)
-        self.console = ConsoleUi(self.console_frame, self.logger)
+        self.scrolled_text = scrolledtext.ScrolledText(self, state='disabled', height=12, width=30)
+        self.scrolled_text.pack(fill=tk.X, side=tk.TOP)
 
-
-class ConsoleUi:
-    def __init__(self, frame, logger):
-        self.frame = frame
-        self.logger = logger
-
-        self.scrolled_text = scrolledtext.ScrolledText(
-            frame, state='disabled', height=12)
-        self.scrolled_text.grid(
-            row=0, column=0, sticky=(tk.N, tk.S, tk.W, tk.E))
         self.scrolled_text.configure(font='TkFixedFont')
         self.scrolled_text.tag_config('INFO', foreground='black')
         self.scrolled_text.tag_config('DEBUG', foreground='gray')
         self.scrolled_text.tag_config('WARNING', foreground='orange')
         self.scrolled_text.tag_config('ERROR', foreground='red')
-        self.scrolled_text.tag_config(
-            'CRITICAL', foreground='red', underline=1)
+        self.scrolled_text.tag_config('CRITICAL', foreground='red', underline=1)
 
-        self.log_queue = queue.Queue()
-        self.queue_handler = QueueHandler(self.log_queue)
-        formatter = logging.Formatter('%(asctime)s: %(message)s')
+        self.form_frame = tk.Frame(self, height=15, width=60)
+        self.form_frame.pack(fill=tk.X, side=tk.TOP)
+        
+        self.message = tk.StringVar()
 
-        self.queue_handler.setFormatter(formatter)
-        self.logger.addHandler(self.queue_handler)
+        self.entry = ttk.Entry(
+            self.form_frame, textvariable=self.message, font="Roboto 12", width=30)
+        self.entry.pack(fill=tk.Y, side=tk.LEFT)
 
-        self.frame.after(100, self.poll_log_queue)
+        self.button = ttk.Button(self.form_frame, text='Send', command=self.submit, width=20)
+        self.button.pack(fill=tk.Y, side=tk.LEFT)
+        
+        self.logger.setLevel(logging.DEBUG)
+        self.logger.debug('EniBot-S ready for service!')
+        self.logger.setLevel(logging.INFO)
+
+        self.after(100, self.poll)
+
+    def submit(self):
+        self.logger.setLevel(logging.DEBUG)
+        self.logger.debug(self.message.get())
+        self.message.set('')
+        self.after(100, self.poll)
+        
+    def disable(self):
+        self.button['state'] = 'disable'
+    
+    def enable(self):
+        self.button['state'] = 'normal'
 
     def display(self, record):
-        msg = self.queue_handler.format(record)
+        msg = self.handler.format(record)
         self.scrolled_text.configure(state='normal')
-        self.scrolled_text.insert(tk.END, msg + '\n', record.levelname)
+        self.scrolled_text.insert(tk.END, msg + '\n', 'DEBUG')
         self.scrolled_text.configure(state='disabled')
-
         self.scrolled_text.yview(tk.END)
 
-    def poll_log_queue(self):
+    def poll(self):
         while True:
             try:
                 record = self.log_queue.get(block=False)
@@ -127,36 +105,4 @@ class ConsoleUi:
                 break
             else:
                 self.display(record)
-        self.frame.after(100, self.poll_log_queue)
-
-
-class FormUi:
-    def __init__(self, frame, logger):
-        self.logger = logger
-        self.frame = frame
-        values = ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']
-        self.level = tk.StringVar()
-        ttk.Label(self.frame, text='Level:').grid(column=0, row=0, sticky=tk.W)
-        self.combobox = ttk.Combobox(
-            self.frame,
-            textvariable=self.level,
-            width=25,
-            state='readonly',
-            values=values
-        )
-        self.combobox.current(0)
-        self.combobox.grid(column=1, row=0, sticky=(tk.W, tk.E))
-        # Create a text field to enter a message
-        self.message = tk.StringVar()
-        ttk.Label(self.frame, text='Message:').grid(
-            column=0, row=1, sticky=tk.W)
-        ttk.Entry(self.frame, textvariable=self.message, width=25).grid(
-            column=1, row=1, sticky=(tk.W, tk.E))
-        # Add a button to log the message
-        self.button = ttk.Button(
-            self.frame, text='Submit', command=self.submit_message)
-        self.button.grid(column=1, row=2, sticky=tk.W)
-
-    def submit_message(self):
-        lvl = getattr(logging, self.level.get())
-        self.logger.log(lvl, self.message.get())
+        self.after(100, self.poll)

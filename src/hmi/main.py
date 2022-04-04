@@ -2,10 +2,13 @@ import tkinter as tk
 import tkinter.ttk as ttk
 
 import os
+import logging
 
 from PIL import ImageTk, Image
 from tkinter import StringVar, messagebox
 
+import device
+import graph
 import log
 
 CWD = os.getcwd()
@@ -29,7 +32,7 @@ FRAME_PADY = 15
 LOGO_WIDTH = 195
 LOGO_HEIGHT = 100
 # assets/img/schematic.png
-SCHEM_WIDTH = 380
+SCHEM_WIDTH = 400
 SCHEM_HEIGHT = 300
 # assets/img/led_off.png
 LED_WIDTH = 25
@@ -37,6 +40,8 @@ LED_HEIGHT = 25
 
 CONTROL_HEIGHT = 3
 CONTROL_WIDTH = 6
+# Serial Config
+BAUDRATE = 57600
 
 
 def get_photo_image(path, size):
@@ -168,20 +173,22 @@ class GraphFrame(tk.Frame):
 
         self.sensors_frame = tk.Frame(self)
         self.sensors_frame.grid(row=2, column=1, sticky="w")
-        
-        self.led_off_photo = get_photo_image(LED_OFF_PATH, (LED_WIDTH, LED_HEIGHT))
-        self.led_on_photo = get_photo_image(LED_ON_PATH, (LED_WIDTH, LED_HEIGHT))
+
+        self.led_off_photo = get_photo_image(
+            LED_OFF_PATH, (LED_WIDTH, LED_HEIGHT))
+        self.led_on_photo = get_photo_image(
+            LED_ON_PATH, (LED_WIDTH, LED_HEIGHT))
 
         self.infrared1 = tk.Label(self.sensors_frame, height=LED_HEIGHT, width=LED_WIDTH,
-                             padx=FRAME_PADX, pady=FRAME_PADY, image=self.led_off_photo)
+                                  padx=FRAME_PADX, pady=FRAME_PADY, image=self.led_off_photo)
         self.infrared1.pack(side="left", fill=None, expand=False)
-        
+
         self.infrared2 = tk.Label(self.sensors_frame, height=LED_HEIGHT, width=LED_WIDTH,
-                             padx=FRAME_PADX, pady=FRAME_PADY, image=self.led_off_photo)
+                                  padx=FRAME_PADX, pady=FRAME_PADY, image=self.led_off_photo)
         self.infrared2.pack(side="left", fill=None, expand=False)
-        
+
         self.infrared3 = tk.Label(self.sensors_frame, height=LED_HEIGHT, width=LED_WIDTH,
-                             padx=FRAME_PADX, pady=FRAME_PADY, image=self.led_off_photo)
+                                  padx=FRAME_PADX, pady=FRAME_PADY, image=self.led_off_photo)
         self.infrared3.pack(side="left", fill=None, expand=False)
 
         self.ultrasonic1_button = tk.Button(self.sensors_frame, text='U1')
@@ -201,7 +208,13 @@ class HMI(tk.Tk):
         tk.Tk.__init__(self, parent, **kw)
         self.title(parent)
         self.resizable(0, 0)
-        self.geometry("900x700")
+        self.geometry("900x480")
+
+        self.filename = log.get_filename()
+        self.logger = log.get_logger(DEBUG_PATH, self.filename)
+
+        self.arduino = device.EniBot()
+        self.arduino.connect_to(device.get_devices()[0], BAUDRATE)
 
         self.header_frame = tk.Frame(
             self, padx=FRAME_PADX, pady=FRAME_PADY)
@@ -217,45 +230,50 @@ class HMI(tk.Tk):
         self.header_lb.pack(anchor=tk.CENTER, expand=True, side=tk.TOP)
 
         self.body_frame = tk.Frame(
-            self, padx=FRAME_PADX, pady=FRAME_PADY, bg='#64a0dd')
+            self, padx=FRAME_PADX, pady=FRAME_PADY)
         self.body_frame.pack(fill=tk.X, side=tk.TOP)
 
-        self.settings_frame = SettingsFrame(
-            self.body_frame, padx=FRAME_PADX, pady=FRAME_PADY, height=400, width=380, bg='#dde061')
-        self.settings_frame.pack(side=tk.LEFT)
+        self.debug_frame = log.ConsoleFrame(
+            self.body_frame, self.logger, height=550, width=280, padx=FRAME_PADX, pady=FRAME_PADY, bg='#66142a')
+        self.debug_frame.pack(fill=tk.Y, side=tk.LEFT)
 
-        self.controls_frame = ControlsFrame(
-            self.body_frame, padx=FRAME_PADX, pady=FRAME_PADY, height=400, width=380, bg='#3d59a5')
-        self.controls_frame.pack(side=tk.LEFT)
-        
-        self.graph_frame = GraphFrame(
-            self.body_frame, padx=FRAME_PADX, pady=FRAME_PADY, height=400, width=380, bg='#bb6219')
-        self.graph_frame.pack(side=tk.BOTTOM)
-
-        self.schem_frame = tk.Frame(self.body_frame, height=200, width=380)
+        self.schem_frame = tk.Frame(self.body_frame, height=550, width=480)
         self.schem_frame.pack(fill=tk.Y, side=tk.RIGHT)
 
+        def open_win():
+            self.attributes('-disabled', True)
+            self.debug_frame.disable()
+            self.monitor_button['state'] = 'disabled'
+            monitor = graph.GraphMonitor("Monitor", logger=self.logger, filename=self.filename, arduino=self.arduino, baudrate=BAUDRATE, sampling_size=400)
+            thread = monitor.collect_data()
+
+            def delete():
+                self.attributes('-disabled', False)
+                self.debug_frame.enable()
+                self.monitor_button.configure(state='normal')
+                monitor.destroyed = True
+                monitor.destroy()
+                thread.join()
+            
+            monitor.protocol("WM_DELETE_WINDOW", delete)
+
+        self.monitor_button = tk.Button(
+            self.debug_frame, text="Open Monitor", command=open_win)
+        self.monitor_button.pack(fill=tk.X, side=tk.TOP)
+
         self.photo = get_photo_image(
-            SCHEM_PATH, (SCHEM_WIDTH + 35, SCHEM_HEIGHT + 35))
+            SCHEM_PATH, (SCHEM_WIDTH, SCHEM_HEIGHT))
         self.logo = tk.Label(self.schem_frame, width=SCHEM_WIDTH, height=SCHEM_HEIGHT,
                              padx=FRAME_PADX, pady=FRAME_PADY, image=self.photo)
         self.logo.pack(fill=tk.X, side=tk.TOP)
 
-        self.filename = log.get_filename()
-        self.logger = log.get_logger(DEBUG_PATH, self.filename)
-
-        self.debug_frame = log.ConsoleFrame(
-            self, self.logger, padx=FRAME_PADX, pady=FRAME_PADY, bg='#34608b')
-        self.debug_frame.pack(fill=tk.X, side=tk.TOP)
-
-
         def on_closing():
             if messagebox.askokcancel("Quit", "Do you want to quit?"):
-            # arduino.close()
                 self.destroy()
 
         self.protocol("WM_DELETE_WINDOW", on_closing)
         self.eval('tk::PlaceWindow . center')
+
 
 if __name__ == '__main__':
     root = HMI("EniBot-S")
