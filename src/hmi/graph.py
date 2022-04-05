@@ -91,7 +91,7 @@ class GraphMonitor(tk.Tk):
         self.encoder.grid()
 
         self.line = anim.FuncAnimation(
-            self.fig, self.update_line, interval=100, blit=False)
+            self.fig, self.update_line, interval=10, blit=False)
         
         # self.ir_frame = main.IRFrame(self)
         # self.ir_frame.pack(fill=tk.X, side=tk.TOP)
@@ -149,13 +149,11 @@ class GraphMonitor(tk.Tk):
             x_min = time_list[0]
             x_max = time_list[len(time_list) - 1]
 
-            self.ultrasonic.set(xlim=(x_min, x_max), ylim=(0, 300))
+            self.ultrasonic.set(xlim=(x_min, x_max + 0.1), ylim=(0, 300))
             self.ultrasonic.plot(time_list, u1_list, label='U1', color='orange')
             self.ultrasonic.plot(time_list, u2_list, label='U2', color='yellow')
             self.ultrasonic.plot(time_list, u3_list, label='U3', color='green')
             
-            y_max_encoder = 10
-            
-            self.encoder.set(xlim=(x_min, x_max + 0.5), ylim=(0, 255 + y_max_encoder))
+            self.encoder.set(xlim=(x_min, x_max + 0.1), ylim=(0, 255))
             self.encoder.plot(time_list, en_a_list, label='EN_A', color='blue')
             self.encoder.plot(time_list, en_b_list, label='EN_B', color='red')

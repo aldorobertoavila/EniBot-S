@@ -232,6 +232,7 @@ class HMI(tk.Tk):
             self.sheet_index+=1
 
             def delete():
+                self.arduino.set_manual()
                 self.attributes('-disabled', False)
                 self.debug_frame.enable()
                 self.monitor_button.configure(state='normal')

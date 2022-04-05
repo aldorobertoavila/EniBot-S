@@ -67,9 +67,9 @@ const float NEARBY_DISTANCE = 25.5;
 const float SEARCH_DISTANCE = 40.25;
 
 // Control Gains
-const float KP = 0.9988;
+const float KP = 0.7988;
 const float KI = 0.00001;
-const float KD = 0.00065;
+const float KD = 0.00095;
 
 String SENSORS[] = {
   "ALL",
@@ -245,9 +245,9 @@ void setup() {
   VELOCITY.addFlagArgument("get");
 
   forwardVelocity = 100;
-  leftwardVelocity = 100;
-  rightwardVelocity = 100;
-  reverseVelocity = 100;
+  leftwardVelocity = 50;
+  rightwardVelocity = 50;
+  reverseVelocity = 70;
 
   setMode(AUTO);
   setState(SEARCH);
@@ -653,16 +653,14 @@ void readSensors() {
 
   if (currentMillis - prevUltrasonicMillis > ULTRASONIC_DELAY) {
     distances[0] = getUltrasonicDistance(TRIG_U1_PIN, ECHO_U1_PIN);
-    delay(20);
     distances[1] = getUltrasonicDistance(TRIG_U2_PIN, ECHO_U2_PIN);
-    delay(20);
     distances[2] = getUltrasonicDistance(TRIG_U3_PIN, ECHO_U3_PIN);
     prevUltrasonicMillis = currentMillis;
   }
 
-  tcrt[0] = !digitalRead(TCRT_U1_PIN);
-  tcrt[1] = !digitalRead(TCRT_U2_PIN);
-  tcrt[2] = !digitalRead(TCRT_U3_PIN);
+  tcrt[0] = digitalRead(TCRT_U1_PIN);
+  tcrt[1] = digitalRead(TCRT_U2_PIN);
+  tcrt[2] = digitalRead(TCRT_U3_PIN);
 }
 
 void updateState() {

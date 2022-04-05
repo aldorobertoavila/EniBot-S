@@ -15,9 +15,9 @@
 #define ENC_B2_PIN 21
 
 // Control Gains
-const float kp = 0.9988;
+const float kp = 0.7988;
 const float ki = 0.00001;
-const float kd = 0.00065;
+const float kd = 0.00095;
 
 bool tcrt[3];
 float distances[3];
@@ -136,7 +136,7 @@ void computeVelocity(int setPoint) {
   lowPassFilter = 0.89 * lowPassFilter + 0.009 * rawV + 0.010 * prevV;
  
   // Compute error
-  float e = setPoint - rawV;
+  float e = setPoint - lowPassFilter;
   float dError = (e  - prevE) / deltaT;
 
   eIntegral = eIntegral + (e * deltaT);
