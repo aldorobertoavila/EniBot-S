@@ -197,6 +197,7 @@ class HMI(tk.Tk):
         self.logger = log.get_logger(LOGS_PATH, self.filename)
 
         self.arduino = device.EniBot()
+        # TODO Remove
         self.arduino.connect_to(device.get_devices()[0], BAUDRATE)
 
         self.header_frame = tk.Frame(
@@ -224,23 +225,29 @@ class HMI(tk.Tk):
         self.schem_frame.pack(fill=tk.Y, side=tk.RIGHT)
 
         def open_win():
-            self.attributes('-disabled', True)
-            self.debug_frame.disable()
-            self.monitor_button['state'] = 'disabled'
-            monitor = graph.GraphMonitor("Monitor", logger=self.logger, filename=f"{self.filename}-{self.sheet_index + 1}", fieldnames=self.fieldnames, arduino=self.arduino, baudrate=BAUDRATE, sampling_size=100)
-            thread = monitor.collect_data()
-            self.sheet_index+=1
+            if(self.arduino.autoconnect(BAUDRATE)):
+                self.arduino.open()
+                self.attributes('-disabled', True)
+                self.debug_frame.disable()
+                self.monitor_button['state'] = 'disabled'
+                monitor = graph.GraphMonitor("Monitor", logger=self.logger, filename=f"{self.filename}-{self.sheet_index + 1}", fieldnames=self.fieldnames, arduino=self.arduino, baudrate=BAUDRATE, sampling_size=100)
+                thread = monitor.collect_data()
+                self.sheet_index+=1
 
-            def delete():
-                self.arduino.set_manual()
-                self.attributes('-disabled', False)
-                self.debug_frame.enable()
-                self.monitor_button.configure(state='normal')
-                monitor.destroyed = True
-                monitor.destroy()
-                thread.join()
+                def delete():
+                    # if(self.arduino.is_connected()):
+                    #    self.arduino.set_manual()
+                    self.attributes('-disabled', False)
+                    self.debug_frame.enable()
+                    self.monitor_button.configure(state='normal')
+                    monitor.destroyed = True
+                    monitor.destroy()
+                    thread.join()
 
-            monitor.protocol("WM_DELETE_WINDOW", delete)
+                monitor.protocol("WM_DELETE_WINDOW", delete)
+            else:
+                messagebox.askokcancel("Lost Connection", "EniBot-S is not connected.")
+                
 
         self.monitor_button = tk.Button(
             self.debug_frame, text="Open Monitor", command=open_win)

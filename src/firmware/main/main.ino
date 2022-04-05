@@ -63,8 +63,8 @@ const unsigned int BACKWARD_TIMEOUT = 600;
 const unsigned int ULTRASONIC_DELAY = 100;
 
 // Obstacle Distance (cm)
-const float NEARBY_DISTANCE = 25.5;
-const float SEARCH_DISTANCE = 40.25;
+const float NEARBY_DISTANCE = 85.5;
+const float SEARCH_DISTANCE = 80.25;
 
 // Control Gains
 const float KP = 0.7988;
