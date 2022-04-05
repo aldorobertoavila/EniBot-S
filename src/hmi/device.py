@@ -22,6 +22,11 @@ class EniBot:
         self.serial.port = port
         self.serial.open()
         time.sleep(2)
+        self.set_manual()
+        
+    def set_manual(self):
+        self.send_command(b"mode -set MANUAL\n")
+        self.send_command(b"state -set STOP\n")
     
     def disconnect(self):
         self.serial.close()

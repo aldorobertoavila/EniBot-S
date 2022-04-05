@@ -160,46 +160,27 @@ class ControlsFrame(tk.Frame):
 
         self.directions_frame.grid_rowconfigure(1, weight=1)
         self.directions_frame.grid_columnconfigure(1, weight=1)
-
-
-class GraphFrame(tk.Frame):
+        
+class IRFrame(tk.Frame):
     def __init__(self, parent, **kw):
         tk.Frame.__init__(self, parent, **kw)
-
-        self.header_lb = tk.Label(
-            self, font='Arial 32', text='Sensors')
-        self.header_lb.grid(row=1, column=1, sticky="ew")
-
-        self.sensors_frame = tk.Frame(self)
-        self.sensors_frame.grid(row=2, column=1, sticky="w")
 
         self.led_off_photo = get_photo_image(
             LED_OFF_PATH, (LED_WIDTH, LED_HEIGHT))
         self.led_on_photo = get_photo_image(
-            LED_ON_PATH, (LED_WIDTH, LED_HEIGHT))
+            LED_ON_PATH, (LED_WIDTH, LED_HEIGHT))        
 
-        self.infrared1 = tk.Label(self.sensors_frame, height=LED_HEIGHT, width=LED_WIDTH,
+        self.infrared1 = tk.Label(self, height=LED_HEIGHT, width=LED_WIDTH,
                                   padx=FRAME_PADX, pady=FRAME_PADY, image=self.led_off_photo)
         self.infrared1.pack(side="left", fill=None, expand=False)
 
-        self.infrared2 = tk.Label(self.sensors_frame, height=LED_HEIGHT, width=LED_WIDTH,
+        self.infrared2 = tk.Label(self, height=LED_HEIGHT, width=LED_WIDTH,
                                   padx=FRAME_PADX, pady=FRAME_PADY, image=self.led_off_photo)
         self.infrared2.pack(side="left", fill=None, expand=False)
 
-        self.infrared3 = tk.Label(self.sensors_frame, height=LED_HEIGHT, width=LED_WIDTH,
+        self.infrared3 = tk.Label(self, height=LED_HEIGHT, width=LED_WIDTH,
                                   padx=FRAME_PADX, pady=FRAME_PADY, image=self.led_off_photo)
         self.infrared3.pack(side="left", fill=None, expand=False)
-
-        self.ultrasonic1_button = tk.Button(self.sensors_frame, text='U1')
-        self.ultrasonic1_button.pack(side="left", fill=None, expand=False)
-
-        self.ultrasonic2_button = tk.Button(self.sensors_frame, text='U2')
-        self.ultrasonic2_button.pack(side="left", fill=None, expand=False)
-
-        self.ultrasonic3_button = tk.Button(self.sensors_frame, text='U3')
-        self.ultrasonic3_button.pack(side="left", fill=None, expand=False)
-
-        self.grid_columnconfigure(1, weight=1)
 
 
 class HMI(tk.Tk):

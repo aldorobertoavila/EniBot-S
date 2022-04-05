@@ -653,10 +653,10 @@ void readSensors() {
 
   if (currentMillis - prevUltrasonicMillis > ULTRASONIC_DELAY) {
     distances[0] = getUltrasonicDistance(TRIG_U1_PIN, ECHO_U1_PIN);
-    // distances[1] = getUltrasonicDistance(TRIG_U2_PIN, ECHO_U2_PIN);
-    // distances[2] = getUltrasonicDistance(TRIG_U3_PIN, ECHO_U3_PIN);
-    distances[1] = 40;
-    distances[2] = 30;
+    delay(20);
+    distances[1] = getUltrasonicDistance(TRIG_U2_PIN, ECHO_U2_PIN);
+    delay(20);
+    distances[2] = getUltrasonicDistance(TRIG_U3_PIN, ECHO_U3_PIN);
     prevUltrasonicMillis = currentMillis;
   }
 

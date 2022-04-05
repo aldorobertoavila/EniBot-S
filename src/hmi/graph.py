@@ -14,7 +14,18 @@ import time
 import threading
 
 import device
+import main
 import log
+
+FRAME_PADX = main.FRAME_PADX
+FRAME_PADY = main.FRAME_PADY
+
+LED_OFF_PATH = main.LED_OFF_PATH
+LED_ON_PATH = main.LED_ON_PATH
+
+# assets/img/led_off.png
+LED_WIDTH = main.LED_WIDTH
+LED_HEIGHT = main.LED_HEIGHT
 
 def threaded(fn):
     def wrapper(*args, **kwargs):
@@ -81,6 +92,9 @@ class GraphMonitor(tk.Tk):
 
         self.line = anim.FuncAnimation(
             self.fig, self.update_line, interval=100, blit=False)
+        
+        # self.ir_frame = main.IRFrame(self)
+        # self.ir_frame.pack(fill=tk.X, side=tk.TOP)
 
     #def on_port_select(self, event):
     #    com = event.widget.get()
