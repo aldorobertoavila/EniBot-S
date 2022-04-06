@@ -14,14 +14,21 @@
 #define ENC_A2_PIN 20
 #define ENC_B2_PIN 21
 
+// Time (ms) for each PID update 
+const int COMPUTE_DELAY = 10;
+
 // Control Gains
-const float kp = 0.7988;
-const float ki = 0.00001;
-const float kd = 0.00095;
+const float kp = 0.8650;
+const float ki = 0.0;
+const float kd = 0.0;
+
+// 60% of PWM
+unsigned int forwardVelocity = 153;
 
 bool tcrt[3];
 float distances[3];
 
+int prevComputeMillis;
 int velocity;
 
 float lowPassFilter;
@@ -154,13 +161,20 @@ void computeVelocity(int setPoint) {
   prevE = e;
   prevV = rawV;
   velocity = pwr;
-
-  Serial.print(setPoint);
-  Serial.print(" ");
-  Serial.println(velocity);
 }
 
 void loop() {
-  computeVelocity(100*(sin(micros()/1e6)>0));
+  unsigned long currentMillis = millis();
+  
+  if(currentMillis - prevComputeMillis > COMPUTE_DELAY) {
+    // Setpoint to 60% PWM for 5 seconds, then 0% for 5 secs
+    unsigned int setPoint = forwardVelocity * (sin(micros() / (1.55e6) )>0);
+    
+    computeVelocity(setPoint);
+    Serial.print(setPoint);
+    Serial.print(" ");
+    Serial.println(velocity);
+    prevComputeMillis = currentMillis;
+  }
   moveForward();
 }
