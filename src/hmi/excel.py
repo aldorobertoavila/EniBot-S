@@ -1,5 +1,4 @@
 import pandas as pd
-import os
 
 def convert_csv(columns, excel_file, csv_files, sheetnames):
     with pd.ExcelWriter(excel_file) as writer:
